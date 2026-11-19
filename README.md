@@ -6,17 +6,27 @@ It needs a companion fork of Scala Native (based on Scala Native's `main`), whic
 
 ## Building
 
-1. In the Scala Native fork, publish its artifacts locally and build `snlink` (see its README). With `-Dscalanative.ivyHome=<dir>` they go to `<dir>/local` instead of `~/.ivy2/local`.
-2. Here, with the same Ivy home:
+1. In the Scala Native fork, publish its artifacts locally, as its README describes ("Building and publishing locally"). The tests also need its `snlink`.
+2. Here:
 
    ```sh
-   sbt -Dsbt.ivy.home=<dir> snc/nativeLink
-   sbt -Dsbt.ivy.home=<dir> \
-     'set LocalProject("snc-host") / nativeConfig ~= (_.withMode(scala.scalanative.build.Mode.releaseFast))' \
+   sbt snc/nativeLink
+   sbt 'set LocalProject("snc-host") / nativeConfig ~= (_.withMode(scala.scalanative.build.Mode.releaseFast))' \
      snc-host/nativeLink
    ```
 
-   `snc` is `native/snc/target/scala-3.10.2-RC1/snc`. `snc-host` is in `native/snc-host/target/scala-3.10.2-RC1/`, with its manifest (`snc-host.snm`) and the class path it was linked from (`snc-host.classpath`), which it needs: next to it, or as `lib/snc.snm` and `lib/snc.classpath` for a `bin/snc`.
+   With the Scala Native fork's artifacts in another Ivy home `<dir>`, run sbt with `-Dsbt.ivy.home=<dir>`.
+
+   `snc` is `native/snc/target/scala-3.10.2-RC1/snc`. `snc-host` is in `native/snc-host/target/scala-3.10.2-RC1/`, with its manifest (`snc-host.snm`) and the class path it was linked from (`snc-host.classpath`), which it needs: next to it, or as `lib/snc.snm` and `lib/snc.classpath` for a `bin/snc`. A symbolic link to `snc-host` finds them next to the file it links to.
+3. To compile with it in sbt or Mill, through the Scala Native fork's plugins, name `snc-host` in `SNC`, or link it as `snc` from a directory on the `PATH`:
+
+   ```sh
+   export SNC=$PWD/native/snc-host/target/scala-3.10.2-RC1/snc-host
+   # or
+   ln -s $PWD/native/snc-host/target/scala-3.10.2-RC1/snc-host ~/.local/bin/snc
+   ```
+
+   The Scala Native fork's README ("Compiling with snc in sbt and Mill") and its `examples/` show how, and what incremental compilation recompiles.
 
 The compiler is built by the reference compiler (3.10.2-RC1) and reports this branch's Scala 3 nightly as its version (`snc --about`, `scalaVersion`): programs compiled with it use `scala-library` of that version, and link with Scala Native's `scalalib_native0.5_3` and `scala3lib_native0.5_3` of `<scalaVersion>+<scalaNativeVersion>`.
 
@@ -55,7 +65,7 @@ With `--events`, standard output carries only a binary event stream (header `SNC
 
 ### Incremental compilation
 
-With `--analysis`, `snc` runs the sbt phases (`sbt-deps` and `sbt-api`, as `scalac` does under Zinc) and sends each call they make to Zinc's incremental callback as one event, in the order of the calls. A JVM-side `xsbti.compile.ScalaCompiler`, such as the companion Scala Native fork's sbt plugin, replays them on Zinc's `AnalysisCallback`; Zinc then hashes the API and decides what to recompile as it does for `scalac`. `--about` says `"analysis":true` and `"eventsProtocol":"1.1"`. The events of a compilation with errors are incomplete: use them only when `done` has exit code 0.
+With `--analysis`, `snc` runs the sbt phases (`sbt-deps` and `sbt-api`, as `scalac` does under Zinc) and sends each call they make to Zinc's incremental callback as one event, in the order of the calls. A JVM-side `xsbti.compile.ScalaCompiler`, such as the one in the companion Scala Native fork's sbt and Mill plugins, replays them on Zinc's `AnalysisCallback`; Zinc then hashes the API and decides what to recompile as it does for `scalac`. `--about` says `"analysis":true` and `"eventsProtocol":"1.1"`. The events of a compilation with errors are incomplete: use them only when `done` has exit code 0.
 
 | Event | Fields | `AnalysisCallback` method |
 |---|---|---|
