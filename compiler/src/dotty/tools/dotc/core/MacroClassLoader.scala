@@ -6,6 +6,7 @@ import dotty.tools.dotc.core.Mode
 import dotty.tools.dotc.util.Property
 import dotty.tools.dotc.reporting.trace
 import dotty.tools.dotc.classpath.ClassPath
+import dotty.tools.dotc.config.PlatformHooks
 
 object MacroClassLoader {
 
@@ -14,7 +15,8 @@ object MacroClassLoader {
 
   /** Get the macro class loader */
   def fromContext(using Context): ClassLoader =
-    if ctx.mode.is(Mode.Interactive) then
+    if !PlatformHooks.isJvm then ClassLoader.getSystemClassLoader.nn // loads no classes
+    else if ctx.mode.is(Mode.Interactive) then
       // In interactive mode (:dep/:jar), classpath can change during the session.
       // Recompute on demand from the current platform classpath.
       makeMacroClassLoader
@@ -23,7 +25,8 @@ object MacroClassLoader {
 
   /** Context with a cached macro class loader that can be accessed with `macroClassLoader` */
   def init(ctx: FreshContext): ctx.type =
-    ctx.setProperty(MacroClassLoaderKey, makeMacroClassLoader(using ctx))
+    if !PlatformHooks.isJvm then ctx
+    else ctx.setProperty(MacroClassLoaderKey, makeMacroClassLoader(using ctx))
 
   private def makeMacroClassLoader(using Context): ClassLoader = trace("new macro class loader") {
     val dirs: List[AbstractFile] =

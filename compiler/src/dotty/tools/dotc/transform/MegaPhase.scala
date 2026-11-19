@@ -8,6 +8,7 @@ import core.*
 import Contexts.*, Phases.*, Symbols.*, Decorators.*
 import Flags.PackageVal
 import staging.StagingLevel.*
+import config.PlatformHooks
 
 /** A MegaPhase combines a number of mini-phases which are all executed in
  *  a single tree traversal.
@@ -511,7 +512,13 @@ class MegaPhase(val miniPhases: Array[MiniPhase]) extends Phase {
         }
         clsMethods(name) || hasRedefinedMethod(cls.getSuperclass.nn)
       }
-    hasRedefinedMethod(phase.getClass)
+    if PlatformHooks.isJvm then hasRedefinedMethod(phase.getClass)
+    else
+      // Without reflection, a generated table; a class it lacks takes part
+      // for every tree kind
+      PlatformHooks.redefinedHooks(phase.getClass.getName) match
+        case null => true
+        case hooks => hooks.contains(name)
   }
 
   private def newNxArray = new Array[MiniPhase | Null](miniPhases.length + 1)

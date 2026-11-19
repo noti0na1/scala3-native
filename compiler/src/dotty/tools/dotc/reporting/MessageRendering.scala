@@ -319,7 +319,8 @@ trait MessageRendering {
       sb.append(EOL).append(newBox())
       sb.append(EOL).append(offsetBox).append(" Explanation (enabled by `-explain`)")
       sb.append(EOL).append(newBox(soft = true))
-      dia.msg.explanation.split(raw"\R").foreach: line =>
+      // \R spelled out: Scala Native's regular expressions do not have it
+      dia.msg.explanation.split("\r\n|[\n\u000B\u000C\r\u0085\u2028\u2029]").foreach: line =>
         sb.append(EOL).append(offsetBox).append(if line.isEmpty then "" else " ").append(line)
       sb.append(EOL).append(endBox)
     else if dia.msg.canExplain then

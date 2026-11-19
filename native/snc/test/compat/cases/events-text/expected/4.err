@@ -1,0 +1,60 @@
+[[syntax trees at end of                     typer]] // W.scala
+package <empty> {
+  import scala.language.implicitConversions
+  final lazy module val W: W = new W()
+  final module class W() extends Object() { this: W.type =>
+    @deprecated("use g", "1.0") def f: Int = 1
+    def g: Int = W.f
+    def h(xs: Any): Int =
+      xs match
+        {
+          case _:List[Int] =>
+            1
+          case _ =>
+            2
+        }
+    def k: String = 1.toString()
+    @Child[(W.Color.Green : W.Color)] @Child[(W.Color.Red : W.Color)] sealed
+      abstract class Color() extends Object(), scala.reflect.Enum {
+      import W.Color.{Red, Green}
+    }
+    final lazy module val Color: W.Color = new W.Color()
+    final module class Color() extends AnyRef() { this: W.Color.type =>
+      case <static> val Red: W.Color = W.Color.$new(0, "Red")
+      case <static> val Green: W.Color = W.Color.$new(1, "Green")
+      private[this] val $values: Array[W.Color] =
+        Array.apply[W.Color]([this.Red,this.Green : W.Color]*)(using
+          scala.reflect.ClassTag.apply[W.Color](classOf[W.Color]))
+      def values: Array[W.Color] = W.Color.$values.clone()
+      def valueOf($name: String): W.Color =
+        $name match
+          {
+            case "Red" => this.Red
+            case "Green" => this.Green
+            case _ =>
+              throw
+                new IllegalArgumentException(
+                  "enum W$.Color has no case with name: " + $name)
+          }
+      private[this] def $new(_$ordinal: Int, $name: String): W.Color =
+        {
+          final class $anon() extends W.Color(), _root_.scala.runtime.EnumValue
+             {}
+          new $anon():(W.Color & scala.runtime.EnumValue)
+        }
+      def fromOrdinal(ordinal: Int): W.Color =
+        if (ordinal ^ -2147483648) >= -2147483646 then
+          throw
+            new NoSuchElementException(
+              "enum W$.Color has no case with ordinal: " + ordinal.toString())
+           else W.Color.$values.apply(ordinal)
+    }
+    def m(c: W.Color): Int =
+      c match
+        {
+          case W.Color.Red =>
+            0
+        }
+  }
+}
+

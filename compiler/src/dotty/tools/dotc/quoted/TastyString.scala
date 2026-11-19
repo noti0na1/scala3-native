@@ -5,6 +5,8 @@ import java.nio.charset.StandardCharsets
 import java.util.Base64
 import scala.jdk.CollectionConverters.*
 
+import dotty.tools.dotc.config.PlatformHooks
+
 /** Utils for String representation of TASTY */
 object TastyString {
 
@@ -19,6 +21,7 @@ object TastyString {
 
   /** Decode the List of Strings into TASTY bytes */
   def unpickle(strings: List[String]): Array[Byte] = {
+    if !PlatformHooks.isJvm then return Base64.getDecoder().decode(strings.mkString)
     val stream = new SequenceInputStream(
       strings.map(s => new ByteArrayInputStream(s.getBytes(StandardCharsets.UTF_8))).iterator.asJavaEnumeration
     )

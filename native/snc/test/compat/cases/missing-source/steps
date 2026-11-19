@@ -1,0 +1,1 @@
+-d out -classpath @CP@ Missing.scala

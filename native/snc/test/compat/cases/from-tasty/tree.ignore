@@ -1,0 +1,3 @@
+# scalac writes no TASTy for top-level objects under -from-tasty: their TASTy
+# goes with the mirror class, which -from-tasty does not pair with it; snc does
+^\./b/p/T\.tasty$

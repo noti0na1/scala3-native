@@ -1,0 +1,2 @@
+-classpath @CP@ @args.txt
+-classpath @CP@ @missing-args.txt Hello.scala

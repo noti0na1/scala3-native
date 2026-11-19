@@ -1,0 +1,2 @@
+-d a -classpath @CP@ A.scala
+-d b -classpath @CP@ A.scala

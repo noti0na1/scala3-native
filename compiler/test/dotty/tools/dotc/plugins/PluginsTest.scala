@@ -64,6 +64,22 @@ class PluginsTest {
   }
 
   @Test
+  def ignoreUnknownPhases = {
+    // As when a compiler without a JVM backend runs a plugin that runs before genBCode
+    object M1 extends TestPhase {
+      override val runsAfter = Set(classOf[P3d])
+      override val runsBefore = Set("unknownPhase")
+    }
+    object M2 extends TestPhase {
+      override val runsAfter = Set("unknownPhase", classOf[P5])
+    }
+
+    val updatedPlan = Plugins.schedule(basicPlan, M1 :: M2 :: Nil)
+    assert(updatedPlan(3)(0) eq M1)
+    assert(updatedPlan(6)(0) eq M2)
+  }
+
+  @Test
   def insertBeforeAfter = {
     object ConstFold extends TestPhase {
       override val runsAfter = Set(classOf[P3d])

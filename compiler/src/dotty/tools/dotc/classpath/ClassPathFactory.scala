@@ -5,6 +5,7 @@ package dotty.tools.dotc.classpath
 
 import dotty.tools.io.{AbstractFile, Directory, File, Path, PlainFile, VirtualDirectory}
 import dotty.tools.dotc.classpath.FileUtils.isClassContainer
+import dotty.tools.dotc.config.PlatformHooks
 import dotty.tools.dotc.core.Contexts.*
 import dotty.tools.dotc.interactive.LogicalSourcePath
 import dotty.tools.dotc.interactive.LogicalPackage
@@ -55,7 +56,9 @@ object ClassPathFactory {
         dir <- Option(AbstractFile.getDirectory(file, ctx.settings.javaOutputVersion.value))
       yield dir
     val expanded =
-      if scala.util.Properties.propOrFalse("scala.expandjavacp") then
+      if !PlatformHooks.isJvm then
+        Seq.empty // manifest class paths are resolved as java.net.URLs
+      else if scala.util.Properties.propOrFalse("scala.expandjavacp") then
         for
           file <- files
           a <- expandManifestPath(file.path)

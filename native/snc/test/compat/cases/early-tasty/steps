@@ -1,0 +1,1 @@
+-Xearly-tasty-output a -d out -classpath @CP@ T.scala

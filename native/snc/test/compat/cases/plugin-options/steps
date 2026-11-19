@@ -1,0 +1,4 @@
+-P:scalanative:genStaticForwardersForNonTopLevelObjects -d out -classpath @CP@ P.scala
+-P:scalanative:positionRelativizationPaths:. -d a -classpath @CP@ P.scala
+-P:nosuchplugin:opt -d b -classpath @CP@ P.scala
+-P:scalanative:nosuchoption -d b -classpath @CP@ P.scala

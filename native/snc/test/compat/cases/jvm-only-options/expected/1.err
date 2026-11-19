@@ -1,0 +1,11 @@
+-J-Xmx1g has no effect: snc does not run on a JVM
+-Dfoo=bar has no effect: snc does not run on a JVM
+-Yusejavacp has no effect: snc does not run on a JVM, so there is no java.class.path
+-Xpluginsdir has no effect: snc does not load plugins; its plugins are built in
+-opt has no effect: snc emits no JVM bytecode
+-opt-inline has no effect: snc emits no JVM bytecode
+-Xno-generic-signatures has no effect: snc emits no JVM bytecode
+-Ybackend-parallelism has no effect: snc emits no JVM bytecode
+-Xmain-class has no effect: snc emits no JVM bytecode
+-scalajs-mapSourceURI has no effect: snc has no Scala.js backend
+10 warnings found

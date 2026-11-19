@@ -1,0 +1,2 @@
+-d out -classpath @CP@ J.java S.scala
+-Xjava-tasty -d a -classpath @CP@ J.java S.scala

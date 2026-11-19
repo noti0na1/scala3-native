@@ -1,0 +1,6 @@
+-foo -d out -classpath @CP@ Hello.scala
+-source:9.9 Hello.scala
+-d missing-dir Hello.scala
+-color:sometimes Hello.scala
+-Xmax-inlines notanumber Hello.scala
+-classpath

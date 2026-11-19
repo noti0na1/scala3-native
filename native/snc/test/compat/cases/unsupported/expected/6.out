@@ -1,0 +1,3 @@
+{"event":"start","protocol":"1.0","compilerVersion":"3.11.0-RC1-bin-SNAPSHOT-nonbootstrapped"}
+{"event":"diagnostic","severity":"error","code":null,"kind":null,"message":"-Yreporter cannot be combined with --events or --events-text","position":null,"explanation":null,"related":[],"actions":[],"rendered":"-Yreporter cannot be combined with --events or --events-text"}
+{"event":"done","exitCode":2,"errors":1,"warnings":0}

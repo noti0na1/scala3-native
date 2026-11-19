@@ -1,0 +1,2 @@
+-color:never -new-syntax -d out -classpath @CP@ N.scala
+-color:never -no-indent -d b -classpath @CP@ N.scala

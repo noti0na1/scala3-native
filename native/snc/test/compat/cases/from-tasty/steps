@@ -1,0 +1,2 @@
+-Xplugin-disable:scalanative -d a -classpath @CP@ T.scala
+-from-tasty -Xplugin-disable:scalanative -d b -classpath a:@CP@ a/p/Point.tasty a/p/T.tasty

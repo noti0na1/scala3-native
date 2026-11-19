@@ -4,7 +4,7 @@ package plugins
 import core.*
 import Contexts.*
 import Decorators.em
-import config.PathResolver
+import config.{PathResolver, PlatformHooks}
 import dotty.tools.io.*
 import dotty.tools.dotc.classpath.ClassPath
 import Phases.*
@@ -34,7 +34,7 @@ trait Plugins {
       def injectDefault(s: String) = if (s.isEmpty) PathResolver.Defaults.scalaPluginPath else s
       asPath(ctx.settings.pluginsDir.value) map injectDefault map Path.apply
     }
-    val maybes = Plugin.loadAllFrom(paths, dirs, ctx.settings.disable.value)
+    val maybes = PlatformHooks.loadPlugins(paths, dirs, ctx.settings.disable.value)
     val (goods, errors) = maybes partition (_.isSuccess)
     // Explicit parameterization of recover to avoid -Wshadow warning about inferred Any
     errors foreach (_.recover[Any] {
@@ -188,14 +188,17 @@ object Plugins {
       val (runsAfter, runsBefore) = orderRequirements(phase.phaseName)
 
       // propagate transitive constraints to related phases
+      // Phases that are neither in the plan nor plugin phases are ignored
       runsAfter.filter(!isInserted(_)).foreach { phaseName =>
-        val (runsAfter1, runsBefore1) = orderRequirements(phaseName)
-        orderRequirements.update(phaseName, (runsAfter1, runsBefore1 + phase.phaseName))
+        orderRequirements.get(phaseName).foreach { (runsAfter1, runsBefore1) =>
+          orderRequirements.update(phaseName, (runsAfter1, runsBefore1 + phase.phaseName))
+        }
       }
 
       runsBefore.filter(!isInserted(_)).foreach { phaseName =>
-        val (runsAfter1, runsBefore1) = orderRequirements(phaseName)
-        orderRequirements.update(phaseName, (runsAfter1 + phase.phaseName, runsBefore1))
+        orderRequirements.get(phaseName).foreach { (runsAfter1, runsBefore1) =>
+          orderRequirements.update(phaseName, (runsAfter1 + phase.phaseName, runsBefore1))
+        }
       }
 
     }
@@ -214,7 +217,7 @@ object Plugins {
         else if (isInserted(beforePhase))
           Set(beforePhase)
         else {
-          val (_, runsBefore) = orderRequirements(beforePhase)
+          val runsBefore = orderRequirements.get(beforePhase).fold(Set.empty[String])(_._2)
           runsBefore.flatMap(propagateRunsBefore) + beforePhase
         }
 
@@ -224,7 +227,7 @@ object Plugins {
         else if (isInserted(afterPhase))
           Set(afterPhase)
         else {
-          val (runsAfter, _) = orderRequirements(afterPhase)
+          val runsAfter = orderRequirements.get(afterPhase).fold(Set.empty[String])(_._1)
           runsAfter.flatMap(propagateRunsAfter) + afterPhase
         }
 

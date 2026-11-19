@@ -1,0 +1,4 @@
+the class path has scala-library 3.10.0 (@OTHER_SCALA_LIBRARY@), but snc is Scala 3.11.0-RC1-bin-20261119-90f3daf-NIGHTLY:
+use scala-library 3.11.0-RC1-bin-20261119-90f3daf-NIGHTLY, and Scala Native's scalalib and scala3lib
+3.11.0-RC1-bin-20261119-90f3daf-NIGHTLY+0.5.13-SNAPSHOT
+1 warning found

@@ -1,0 +1,3 @@
+Cannot load plugin com.example.MyPlugin from myplugin:
+the native compiler cannot load plugins, and this one is not built in.
+Built-in plugins: scala.scalanative.junit.plugin.ScalaNativeJUnitPlugin, scala.scalanative.nscplugin.ScalaNativePlugin

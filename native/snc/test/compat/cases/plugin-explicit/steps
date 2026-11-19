@@ -1,0 +1,2 @@
+-Xplugin:@NSCPLUGIN@ -d out -classpath @CP@ Hello.scala
+-Xplugin:@NSCPLUGIN@ -Xplugin:@NSCPLUGIN@ -Xplugin-require:scalanative -d a -classpath @CP@ Hello.scala

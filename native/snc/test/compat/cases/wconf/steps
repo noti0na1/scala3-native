@@ -1,0 +1,1 @@
+-color:never -deprecation -Wconf:cat=deprecation:s,any:e -d out -classpath @CP@ W.scala

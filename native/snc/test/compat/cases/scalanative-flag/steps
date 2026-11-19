@@ -1,0 +1,2 @@
+-scalanative -d a -classpath @CP@ Hello.scala
+-d b -classpath @CP@ Hello.scala

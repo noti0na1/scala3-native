@@ -153,7 +153,10 @@ object Names {
 
     def endsWith(suffix: SimpleName): Boolean = lastPart.endsWith(suffix)
 
-    // keep the default reference-based equality and hashcode, since names are interned
+    // Keep the default reference-based equality, since names are interned. The
+    // hash codes of the subclasses depend on the characters only, so that the
+    // order of sets and maps of names, and with it the output, does not depend
+    // on identity hash codes, which vary between runs on Scala Native.
   }
 
   /** Names for terms, can be simple or derived */
@@ -329,6 +332,8 @@ object Names {
     override def lastPart: SimpleName = this
 
     override def toString: String = value
+
+    override def hashCode: Int = value.hashCode
     override def debugString: String = value
 
     def compareTo(other: SimpleName): Int =
@@ -370,6 +375,8 @@ object Names {
     override def lastPart: SimpleName = toTermName.lastPart
 
     override def toString: String = toTermName.toString
+
+    override def hashCode: Int = ~toTermName.hashCode
     override def debugString: String = toTermName.debugString + "/T"
   }
 
@@ -433,6 +440,8 @@ object Names {
     @sharable private var myToString: String | Null = null
     override def toString: String =
       initialize(myToString, myToString = _, info.mkString(underlying))
+
+    override def hashCode: Int = toString.hashCode * 31 + info.kind.tag
 
     override def debugString: String = s"${underlying.debugString}[$info]"
   }

@@ -1,0 +1,4 @@
+--events-text -color:never -deprecation -d out -classpath @CP@ W.scala
+--events-text -color:never -d out -classpath @CP@ A.scala
+--events-text -source:9.9 A.scala
+--events-text -color:never -Vprint:typer -d out -classpath @CP@ W.scala

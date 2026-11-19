@@ -1,0 +1,2 @@
+-Xplugin:@JUNIT_PLUGIN@ -d out -classpath @CP@:@JUNIT_CP@ MyTest.scala
+-d a -classpath @CP@:@JUNIT_CP@ MyTest.scala

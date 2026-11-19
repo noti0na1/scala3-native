@@ -1,0 +1,4 @@
+-cp @CP@ -d out Hello.scala
+--class-path @CP@ -d out Hello.scala
+-classpath:@CP@ -d out Hello.scala
+-d out Hello.scala

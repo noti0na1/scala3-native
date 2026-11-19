@@ -44,6 +44,10 @@ object ClassPath {
 
   /** Attempts to create a classpath for the Java libraries of the given Java release. */
   def jrt(release: Option[String]): Option[ClassPath] =
+    // On Scala Native there is no running JDK: the Java classes come from a
+    // JDK that the compiler reads
+    if !dotty.tools.dotc.config.PlatformHooks.isJvm then
+      return dotty.tools.dotc.config.PlatformHooks.jdkClassPath(release)
     // Longer term we'd like an official API for this in the JDK
     // Discussion: http://mail.openjdk.java.net/pipermail/compiler-dev/2018-March/thread.html#11738
     release match

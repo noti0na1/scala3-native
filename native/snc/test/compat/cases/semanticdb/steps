@@ -1,0 +1,2 @@
+-Xsemanticdb -sourceroot . -d out -classpath @CP@ Hello.scala
+-Xsemanticdb -semanticdb-target a -semanticdb-text -d out -classpath @CP@ Hello.scala

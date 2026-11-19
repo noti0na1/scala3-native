@@ -13,7 +13,7 @@ object ScalaSettingsProperties:
     (minTargetVersion to maxTargetVersion).toList.map(_.toString)
 
   def supportedReleaseVersions: List[String] =
-    val jdkVersion = Runtime.version().feature()
+    val jdkVersion = if PlatformHooks.isJvm then Runtime.version().feature() else maxTargetVersion
     val maxVersion = Math.min(jdkVersion, maxTargetVersion)
     (minReleaseVersion to maxVersion).toList.map(_.toString)
 

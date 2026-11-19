@@ -1,0 +1,1 @@
+Could not create reporter com.example.MyReporter: java.lang.ClassNotFoundException: com.example.MyReporter: the native compiler cannot load classes by name

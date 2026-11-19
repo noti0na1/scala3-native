@@ -1,0 +1,2 @@
+-color:never -source:3.0-migration -d out -classpath @CP@ M.scala
+-color:never -source 3.4-migration -rewrite -d b -classpath @CP@ M.scala

@@ -1,0 +1,2 @@
+--events -color:never -d out -classpath @CP@ A.scala
+--events-text -color:never -d out -classpath @CP@ A.scala

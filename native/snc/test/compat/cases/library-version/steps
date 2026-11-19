@@ -1,0 +1,2 @@
+-color:never -d out -classpath @CP@:@OTHER_SCALA_LIBRARY@ Hello.scala
+-color:never -Wconf:cat=configuration:s -Werror -d out -classpath @CP@:@OTHER_SCALA_LIBRARY@ Hello.scala

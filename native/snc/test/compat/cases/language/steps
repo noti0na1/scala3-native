@@ -1,0 +1,2 @@
+-color:never -feature -d out -classpath @CP@ L.scala
+-color:never -feature -language:implicitConversions,dynamics -d b -classpath @CP@ L.scala

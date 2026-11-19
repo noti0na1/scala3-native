@@ -1,0 +1,3 @@
+-Xplugin-list
+-Xplugin-list -Xplugin-disable:scalanative
+-Xplugin:missing.jar -d out -classpath @CP@ Hello.scala

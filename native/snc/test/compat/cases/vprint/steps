@@ -1,0 +1,2 @@
+-color:never -Vprint:typer -d out -classpath @CP@ Hello.scala
+-color:never -Xprint:postInlining -Xprint-types -d b -classpath @CP@ Hello.scala

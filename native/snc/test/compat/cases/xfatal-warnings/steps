@@ -1,0 +1,1 @@
+-color:never -deprecation -Xfatal-warnings -d out -classpath @CP@ W.scala

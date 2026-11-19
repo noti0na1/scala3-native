@@ -1,0 +1,9 @@
+-release 17 -d out -cp @CP@ Hello.scala
+-java-output-version:17 -d out -classpath @CP@ Hello.scala
+--release 17 -d out --class-path @CP@ Hello.scala
+-Xmax-inlines 64 -Ximplicit-search-limit 1000 -Yno-deep-subtypes -d out -classpath @CP@ Hello.scala
+-Ystop-after:typer -d a -classpath @CP@ Hello.scala
+-Ycheck:all -d b -classpath @CP@ Hello.scala
+-Yexplicit-nulls -Wsafe-init -d out -classpath @CP@ Hello.scala
+-sourcepath . -sourceroot . -d out -classpath @CP@ Hello.scala
+-uniqid -experimental -d out -classpath @CP@ Hello.scala

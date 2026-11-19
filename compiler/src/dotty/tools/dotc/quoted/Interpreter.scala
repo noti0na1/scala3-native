@@ -9,6 +9,7 @@ import java.lang.reflect.{InvocationTargetException, Method => JLRMethod}
 
 import dotty.tools.dotc.ast.tpd
 import dotty.tools.dotc.ast.TreeMapWithImplicits
+import dotty.tools.dotc.config.PlatformHooks
 import dotty.tools.dotc.core.Annotations.*
 import dotty.tools.dotc.core.Constants.*
 import dotty.tools.dotc.core.Contexts.*
@@ -34,7 +35,8 @@ class Interpreter(pos: SrcPos, classLoader0: ClassLoader)(using Context):
   import tpd.*
 
   val classLoader =
-    if ctx.owner.topLevelClass.name.startsWith(str.REPL_SESSION_LINE) then
+    if !PlatformHooks.isJvm then classLoader0
+    else if ctx.owner.topLevelClass.name.startsWith(str.REPL_SESSION_LINE) then
         new AbstractFileClassLoader(ctx.settings.outputDir.value, ctx.settings.javaOutputVersion.value, classLoader0)
     else classLoader0
 
@@ -70,7 +72,10 @@ class Interpreter(pos: SrcPos, classLoader0: ClassLoader)(using Context):
 
     // TODO disallow interpreted method calls as arguments
     case Call(fn, args) =>
-      if (fn.symbol.isConstructor)
+      if !PlatformHooks.isJvm then
+        // Calls run compiled macro code by reflection
+        throw new StopInterpretation(em"Macro expansion is not supported by the native compiler yet", tree.srcPos)
+      else if (fn.symbol.isConstructor)
         interpretNew(fn.symbol, args.flatten.map(interpretTree))
       else if (fn.symbol.is(Module))
         interpretModuleAccess(fn.symbol)

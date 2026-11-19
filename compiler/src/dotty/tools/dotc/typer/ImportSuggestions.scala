@@ -11,7 +11,7 @@ import StdNames.*
 import config.Printers.{implicits, implicitsDetailed}
 import ast.{untpd, tpd}
 import Implicits.{hasExtMethod, Candidate}
-import java.util.{Timer, TimerTask}
+import config.PlatformHooks.{Timer, TimerTask}
 import collection.mutable
 import cc.isCaptureChecking
 

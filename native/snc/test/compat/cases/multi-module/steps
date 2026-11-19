@@ -1,0 +1,3 @@
+-d a -classpath @CP@ moda/A.scala
+-d b -classpath a:@CP@ modb/B.scala
+-color:never -d out -classpath a:@CP@ modb/Bad.scala

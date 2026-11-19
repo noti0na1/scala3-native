@@ -7,6 +7,7 @@ import Contexts.*
 import Flags.*
 import Symbols.*
 import NameOps.*
+import config.PlatformHooks
 
 import xsbti.api
 import xsbti.api.SafeLazy.strict
@@ -34,7 +35,7 @@ object APIUtils {
    *  a dummy empty class can be registered instead, using this method.
    */
   def registerDummyClass(classSym: ClassSymbol)(using Context): Unit = {
-    ctx.withIncCallback { cb =>
+    if PlatformHooks.isJvm then ctx.withIncCallback { cb =>
       val classLike = emptyClassLike(classSym)
       cb.api(ctx.compilationUnit.source, classLike)
     }

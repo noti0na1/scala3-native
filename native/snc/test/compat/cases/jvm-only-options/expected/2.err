@@ -1,0 +1,4 @@
+-opt has no effect: snc emits no JVM bytecode
+No warnings can be incurred under -Werror
+1 warning found
+1 error found

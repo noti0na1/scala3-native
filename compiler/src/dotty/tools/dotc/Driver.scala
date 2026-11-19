@@ -1,7 +1,7 @@
 package dotty.tools.dotc
 
 import dotty.tools.FatalError
-import config.CompilerCommand
+import config.{CompilerCommand, PlatformHooks}
 import core.Comments.{ContextDoc, ContextDocstrings}
 import core.Contexts.*
 import core.{MacroClassLoader, RecursionOverflow, TypeError}
@@ -101,7 +101,7 @@ class Driver {
         Positioned.init
         if !ctx.settings.Yreporter.isDefault && ctx.settings.Yreporter.value != "help" then
           try
-            Class.forName(ctx.settings.Yreporter.value).getDeclaredConstructor().newInstance() match
+            PlatformHooks.newInstance(ctx.settings.Yreporter.value) match
               case userReporter: Reporter =>
                 ictx.setReporter(userReporter)
               case badReporter =>

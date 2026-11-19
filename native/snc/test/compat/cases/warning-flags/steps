@@ -1,0 +1,1 @@
+-color:never -deprecation -feature -unchecked -d out -classpath @CP@ W.scala

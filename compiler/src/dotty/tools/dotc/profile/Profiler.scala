@@ -15,6 +15,8 @@ import dotty.tools.dotc.CompilationUnit
 import dotty.tools.dotc.core.Types.Type
 import dotty.tools.dotc.core.Symbols.{Symbol, NoSymbol}
 import dotty.tools.dotc.core.Flags
+import dotty.tools.dotc.config.PlatformHooks
+import dotty.tools.dotc.report
 import dotty.tools.io.AbstractFile
 import annotation.internal.sharable
 import dotty.tools.dotc.core.Periods.InitialRunId
@@ -24,6 +26,10 @@ import scala.jdk.CollectionConverters.*
 object Profiler {
   def apply()(using Context): Profiler =
     if (!ctx.settings.YprofileEnabled.value) NoOpProfiler
+    else if !PlatformHooks.isJvm then
+      // The profiler reads JVM management beans
+      report.warning("-Yprofile-enabled is not supported by the native compiler")
+      NoOpProfiler
     else {
       val reporter = if (ctx.settings.YprofileDestination.value != "")
         new StreamProfileReporter(new PrintWriter(new FileWriter(ctx.settings.YprofileDestination.value, true)))

@@ -1,0 +1,1 @@
+-color:never -source:future -d out -classpath @CP@ F.scala

@@ -23,7 +23,8 @@ enum MessageFilter:
     case Unchecked => message.isInstanceOf[UncheckedWarning]
     case MessageID(errorId) => message.msg.errorId == errorId
     case MessagePattern(pattern) =>
-      val noHighlight = message.msg.message.replaceAll("\\e\\[[\\d;]*[^\\d;]", "")
+      // A literal ESC, since `\e` is not in Scala Native's regex syntax
+      val noHighlight = message.msg.message.replaceAll("\u001b\\[[\\d;]*[^\\d;]", "")
       pattern.findFirstIn(noHighlight).nonEmpty
     case SourcePattern(pattern) =>
       val source = message.position.orElse(NoSourcePosition).source()

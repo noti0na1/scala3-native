@@ -11,6 +11,8 @@ import java.util.zip.{ZipEntry, ZipFile}
 import java.util.jar.JarFile
 import scala.collection.mutable
 
+import dotty.tools.dotc.config.PlatformHooks
+
 /** An abstraction for zip files and streams.  Everything is written the way
  *  it is for performance: we come through here a lot on every run.  Be careful
  *  about changing it.
@@ -97,7 +99,9 @@ private[io] abstract class ZipArchive(override val jpath: JPath) extends Abstrac
 private[io] final class FileZipArchive(jpath: JPath, release: String) extends ZipArchive(jpath) {
   private def openZipFile(): ZipFile = try {
     if file.nn.getName.endsWith(".jar") then
-      new JarFile(file, true, ZipFile.OPEN_READ, if release == "" then Runtime.version() else Runtime.Version.parse(release))
+      if PlatformHooks.isJvm then
+        new JarFile(file, true, ZipFile.OPEN_READ, if release == "" then Runtime.version() else Runtime.Version.parse(release))
+      else new ZipFile(file) // without multi-release versions
     else
       new ZipFile(file)
   } catch {

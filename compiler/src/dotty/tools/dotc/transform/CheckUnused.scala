@@ -2,6 +2,7 @@ package dotty.tools.dotc
 package transform
 
 import ast.*, desugar.{ForArtifact, PatternVar, UntupledParam}, tpd.*, untpd.ImportSelector
+import config.PlatformHooks
 import core.*, Contexts.*, Decorators.*, Flags.*
 import Names.{Name, SimpleName, DerivedName, TermName, termName}
 import NameKinds.{BodyRetainerName, ContextFunctionParamName, DefaultGetterName, WildcardParamName}
@@ -1084,11 +1085,9 @@ object CheckUnused:
             // ...member("reflect")...member(unapplied.name.toTypeName)
             // with aliases into requiredModule("dotty.tools.dotc.ast.tpd")
             val implName = s"dotty.tools.dotc.ast.Trees$$${unapplied.name}"
-            try
-              val clz = Class.forName(implName) // TODO improve to use class path or reflect
-              val ok = clz.getConstructors.head.getParameters.map(p => termName(p.getName)).toList.init
-              allowVariableBindings(ok, args)
-            catch case _: ClassNotFoundException => ()
+            // TODO improve to use class path or reflect
+            PlatformHooks.constructorParameterNames(implName).foreach: names =>
+              allowVariableBindings(names.map(termName(_)).init, args)
         args.foreach(traverse)
       case tree => traverseChildren(tree)
 

@@ -110,7 +110,7 @@ trait CliCommand:
 
   /** Used for the formatted output of -Xshow-phases */
   protected def phasesMessage(using Context): String =
-    val phases = new Compiler().phases
+    val phases = PlatformHooks.newCompiler().phases
     val formatter = Columnator("phase name", "description", maxField = 25)
     formatter(phases.map(mega => mega.map(p => (p.phaseName, p.description))))
 

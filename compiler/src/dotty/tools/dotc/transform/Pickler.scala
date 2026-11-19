@@ -43,9 +43,9 @@ object Pickler {
 
   /** If set, perform jump target compacting, position and comment pickling,
    *  as well as final assembly in parallel with downstream phases; force
-   *  only in backend.
+   *  only in backend. The native compiler is single-threaded.
    */
-  inline val ParallelPickling = true
+  inline val ParallelPickling = config.PlatformHooks.isJvm
 
   /** Pipelining support. With `-Yearly-tasty-output`, TASTy files are written after the pickler,
    *  and zinc is notified via `apiPhaseCompleted` / `dependencyPhaseCompleted`. sbt can then start
@@ -538,7 +538,8 @@ class Pickler extends Phase {
           async.signalWriteScheduled()
 
     val result =
-      if useExecutor then
+      // ParallelPickling first: without it, the executor thread is unreachable
+      if Pickler.ParallelPickling && useExecutor then
         executor.start()
         try
           runPhase: doWrite =>

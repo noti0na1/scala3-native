@@ -1,0 +1,4 @@
+-opt -opt-inline:** -J-Xmx1g -Dfoo=bar -usejavacp -Xpluginsdir plugins -Ybackend-parallelism 2 -Xmain-class Hello -Xno-generic-signatures -scalajs-mapSourceURI:a->b -d out -classpath @CP@ Hello.scala
+-opt -Werror -d out -classpath @CP@ Hello.scala
+-opt -Werror -Wconf:cat=configuration:s -d out -classpath @CP@ Hello.scala
+-scalajs -d out -classpath @CP@ Hello.scala

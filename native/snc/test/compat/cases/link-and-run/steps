@@ -1,0 +1,2 @@
+-d a -classpath @CP@ moda/A.scala
+-d b -classpath a:@CP@ modb/B.scala

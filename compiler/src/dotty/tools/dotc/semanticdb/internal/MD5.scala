@@ -2,16 +2,15 @@ package dotty.tools.dotc.semanticdb.internal
 
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
-import java.security.MessageDigest
+
+import dotty.tools.dotc.config.PlatformHooks
 
 object MD5 {
   def compute(string: String): String = {
     compute(string.getBytes(StandardCharsets.UTF_8))
   }
   def compute(buffer: Array[Byte]): String = {
-    val md = MessageDigest.getInstance("MD5")
-    md.update(buffer)
-    bytesToHex(md.digest())
+    bytesToHex(PlatformHooks.md5(buffer))
   }
   private val hexArray = Array('0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F')
   private def bytesToHex(bytes: Array[Byte]): String = {
