@@ -18,7 +18,14 @@ It needs a companion fork of Scala Native (based on Scala Native's `main`), whic
    With the Scala Native fork's artifacts in another Ivy home `<dir>`, run sbt with `-Dsbt.ivy.home=<dir>`.
 
    `snc` is `native/snc/target/scala-3.10.2-RC1/snc`. `snc-host` is in `native/snc-host/target/scala-3.10.2-RC1/`, with its manifest (`snc-host.snm`) and the class path it was linked from (`snc-host.classpath`), which it needs: next to it, or as `lib/snc.snm` and `lib/snc.classpath` for a `bin/snc`. A symbolic link to `snc-host` finds them next to the file it links to.
-3. To compile with it in sbt or Mill, through the Scala Native fork's plugins, name `snc-host` in `SNC`, or link it as `snc` from a directory on the `PATH`:
+3. To compile with it in sbt or Mill, through the Scala Native fork's plugins, and to run `snc repl`, install `snc-host` with coursier, which puts it on the `PATH` as `snc`. The REPL needs the Scala Native fork's native `snlink` (its README, "snlink"):
+
+   ```sh
+   SNLINK=<the Scala Native fork>/target/out/native0.5/scala-3.10.0/snlink/snlink native/snc/coursier-channel.sh
+   cs install --channel native/snc-host/target/coursier/channel snc
+   ```
+
+   `coursier-channel.sh` packs `snc-host`, its manifest and copies of the NIR it was linked from into an archive and writes a local coursier channel for it, so the installed `snc` does not depend on this checkout. For the REPL it adds `repl-runtime.jar`, `snlink` (`SNLINK`, by default the one in `../scala-native`), the libraries that lines compile and link with, resolved with `cs` from the Ivy home the Scala Native fork was published to (`SCALANATIVE_IVY_HOME`, by default `~/.ivy2`), and an evaluator host linked for them ([REPL](#repl)). After linking `snc-host` or `snlink` again, run the script again and `cs update snc`. Without coursier, name `snc-host` in `SNC`, or link it as `snc` from a directory on the `PATH`:
 
    ```sh
    export SNC=$PWD/native/snc-host/target/scala-3.10.2-RC1/snc-host
