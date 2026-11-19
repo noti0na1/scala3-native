@@ -1,0 +1,129 @@
+# snc-host's live-execution boundary: what code that snc-host loads (macro
+# implementations) may subclass and call. Read by the build
+# (NativeBuild.sncHostBoundary) and by link-host.sh; README.md, "snc-host",
+# describes them.
+#
+# One pattern per line after `open` or `callable`: a NIR class name, a glob
+# (`*` matches any characters), or `-` and a pattern to exclude. Open types
+# also need their members called, so most of them are callable too. The host
+# links with stubUnlinkable: callable code that does not link throws when it
+# runs (scala-native's live.HostStubs).
+
+# --- open: classes and traits extensions may subclass or implement ---------
+
+# Every class extends Object
+open java.lang.Object
+# Functions and lambdas: the SAM types lambdas implement, specialized ones too
+open scala.Function*
+open scala.PartialFunction
+open scala.runtime.AbstractFunction*
+open scala.runtime.AbstractPartialFunction
+open scala.runtime.java8.*
+open scala.runtime.function.*
+open java.util.function.*
+open java.lang.Runnable
+# Case classes, case objects, enums and their mirrors
+open scala.Product
+open scala.Equals
+open java.io.Serializable
+open scala.deriving.Mirror
+open scala.deriving.Mirror$Product
+open scala.deriving.Mirror$Sum
+open scala.deriving.Mirror$Singleton
+open scala.reflect.Enum
+open scala.runtime.EnumValue
+open java.lang.Enum
+open scala.App
+open scala.DelayedInit
+# Exceptions macro code defines, throws and catches
+open java.lang.Throwable
+open java.lang.Exception
+open java.lang.RuntimeException
+open java.lang.Error
+open java.lang.IllegalArgumentException
+open java.lang.IllegalStateException
+open java.lang.UnsupportedOperationException
+open java.lang.IndexOutOfBoundsException
+open java.util.NoSuchElementException
+open java.lang.ArithmeticException
+open java.lang.AssertionError
+open scala.util.control.ControlThrowable
+open scala.util.control.NoStackTrace
+# Orderings, iterators, comparisons
+open scala.math.Ordering
+open scala.math.Ordered
+open scala.math.PartialOrdering
+open scala.math.Equiv
+open java.lang.Comparable
+open java.util.Comparator
+open scala.collection.Iterator
+open scala.collection.AbstractIterator
+open scala.collection.IterableOnce
+# Numeric literals and structural types
+open scala.util.FromDigits*
+open scala.Selectable
+open scala.reflect.Selectable
+# Annotations: macro annotations are instantiated and called by the compiler
+open scala.annotation.Annotation
+open scala.annotation.StaticAnnotation
+open scala.annotation.MacroAnnotation
+# The quotes API that macros implement
+open scala.quoted.FromExpr
+open scala.quoted.ToExpr
+open scala.quoted.ExprMap
+open scala.quoted.Quotes$reflectModule$TreeMap
+open scala.quoted.Quotes$reflectModule$TreeAccumulator
+open scala.quoted.Quotes$reflectModule$TreeTraverser
+# Macro entry tables registered with the compiler's MacroRegistry
+open dotty.tools.dotc.quoted.MacroInvokers
+
+# --- callable: kept reachable, out of line and exported --------------------
+
+# The standard library and the quotes API with its implementation
+# (scala.quoted.runtime.impl.QuotesImpl and everything in that package),
+# without the parts for Java interop, concurrency and processes, which macro
+# code has no use for in a single-threaded compiler
+callable scala.*
+callable -scala.scalanative.*
+callable -scala.jdk.*
+callable -scala.collection.convert.*
+callable -scala.collection.concurrent.*
+callable -scala.concurrent.*
+callable -scala.sys.process.*
+# The core of javalib: the language, collections, numbers, text and I/O
+callable java.lang.*
+callable -java.lang.process.*
+callable -java.lang.management.*
+callable -java.lang.invoke.*
+callable java.util.*
+# Concurrent collections and atomics, not executors and blocking queues
+callable -java.util.concurrent.locks.*
+callable -java.util.concurrent.AbstractExecutorService*
+callable -java.util.concurrent.Executor*
+callable -java.util.concurrent.ThreadPoolExecutor*
+callable -java.util.concurrent.ScheduledThreadPoolExecutor*
+callable -java.util.concurrent.ForkJoin*
+callable -java.util.concurrent.Recursive*
+callable -java.util.concurrent.CountedCompleter*
+callable -java.util.concurrent.CompletableFuture*
+callable -java.util.concurrent.SubmissionPublisher*
+callable -java.util.concurrent.Phaser*
+callable -java.util.concurrent.Exchanger*
+callable -java.util.concurrent.CyclicBarrier*
+callable -java.util.concurrent.FutureTask*
+callable -java.util.concurrent.ArrayBlockingQueue*
+callable -java.util.concurrent.LinkedBlocking*
+callable -java.util.concurrent.PriorityBlockingQueue*
+callable -java.util.concurrent.LinkedTransferQueue*
+callable -java.util.concurrent.SynchronousQueue*
+callable -java.util.concurrent.DelayQueue*
+callable -java.util.stream.*
+callable -java.util.zip.*
+callable -java.util.jar.*
+callable -java.util.random.*
+callable java.math.*
+callable java.io.*
+callable java.nio.charset.*
+# The registry that loaded macro code registers its entries with
+callable dotty.tools.dotc.quoted.MacroRegistry$
+callable dotty.tools.dotc.quoted.MacroInvokers

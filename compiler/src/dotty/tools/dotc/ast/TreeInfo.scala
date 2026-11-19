@@ -1215,7 +1215,7 @@ trait TypedTreeInfo extends TreeInfo[Type] { self: Trees.Instance[Type] =>
         false
     }
     def hash(using Context): Int =
-      t1.getClass.hashCode * 37 + {
+      t1.getClass.getName.hashCode * 37 + {
         t1 match {
           case t1: Ident => t1.symbol.hashCode
           case t1 @ Select(q1, _) => t1.symbol.hashCode * 41 + q1.hash

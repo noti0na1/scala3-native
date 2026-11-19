@@ -42,7 +42,13 @@ object Hashable {
 trait Hashable {
   import Hashable.*
 
-  protected def hashSeed: Int = getClass.hashCode
+  /** The seed of this type's hash: its class, by name, so that type hashes,
+   *  and with them the iteration order of hash tables keyed by types, are the
+   *  same in every run and on every platform. A class's identity hash code is
+   *  not: HotSpot's happen to repeat between runs, Scala Native's come from
+   *  addresses.
+   */
+  protected def hashSeed: Int = getClass.getName.hashCode
 
   protected final def finishHash(hashCode: Int, arity: Int): Int =
     avoidSpecialHashes(hashing.finalizeHash(hashCode, arity))

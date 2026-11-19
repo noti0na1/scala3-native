@@ -195,6 +195,59 @@ object NativeBuild {
         nativeConfig ~= nativeCompilerConfig
       )
 
+  /** `snc` linked as a live-execution host (README.md):
+   *  the same compiler, with the boundary of native/snc/host/boundary.txt and
+   *  the toolchain's extension linker built in, so that it links and loads
+   *  code that it compiled (macro implementations) without another process.
+   *  Its main is `SncHostMain`. The binary is
+   *  `native/snc-host/target/scala-3.10.2-RC1/snc-host`, with its manifest
+   *  (`snc-host.snm`) and the class path it was linked from
+   *  (`snc-host.classpath`, which its extension links read) next to it.
+   *
+   *  The toolchain comes from scala-native's `tools_native0.5_3`; its `nir` and
+   *  `util` are nscplugin's copies, which `snc` has already.
+   */
+  lazy val sncHost =
+    Project("snc-host", file("native/snc-host"))
+      .enablePlugins(ScalaNativePlugin)
+      .dependsOn(snc)
+      .settings(
+        scalaVersion := Versions.referenceVersion,
+        scalacOptions --= Seq("-Werror", "-Yexplicit-nulls", "-Wsafe-init"),
+        Compile / unmanagedSourceDirectories := Seq(baseDirectory.value / "src"),
+        libraryDependencies += ("org.scala-native" % "tools_native0.5_3" % scalaNativeVersion)
+          .exclude("org.scala-native", "nir_native0.5_3")
+          .exclude("org.scala-native", "util_native0.5_3"),
+        Compile / mainClass := Some("dotty.tools.dotc.SncHostMain"),
+        nativeConfig := {
+          val boundary = sncHostBoundary((ThisBuild / baseDirectory).value / "native" / "snc" / "host" / "boundary.txt")
+          nativeCompilerConfig(nativeConfig.value)
+            .withLiveExecution(scala.scalanative.build.LiveExecution.Host(
+              open = boundary._1, callable = boundary._2, stubUnlinkable = true))
+        },
+        Compile / nativeLink := {
+          val binary = (Compile / nativeLink).value
+          val dir = binary.getParentFile
+          // The NIR the extension linker reads the host's classes from
+          IO.writeLines(dir / (binary.getName + ".classpath"),
+            (Compile / fullClasspath).value.files.map(_.getAbsolutePath).filterNot(_.endsWith("-sources.jar")))
+          binary
+        }
+      )
+
+  /** The open and callable patterns of a boundary file: lines `open <pattern>`
+   *  and `callable <pattern>`, `#` comments.
+   */
+  def sncHostBoundary(file: File): (Seq[String], Seq[String]) = {
+    val entries = IO.readLines(file).map(_.trim).filter(l => l.nonEmpty && !l.startsWith("#")).map { line =>
+      line.split("\\s+", 2) match {
+        case Array(kind @ ("open" | "callable"), pattern) => kind -> pattern.trim
+        case _ => sys.error(s"$file: bad line: $line")
+      }
+    }
+    (entries.collect { case ("open", p) => p }, entries.collect { case ("callable", p) => p })
+  }
+
   /** For each concrete miniphase class among `roots` (class directories or
    *  jars), the `MiniPhase` methods that it or a superclass redefines, which
    *  `MegaPhase` finds by reflection on the JVM. The native compiler has no

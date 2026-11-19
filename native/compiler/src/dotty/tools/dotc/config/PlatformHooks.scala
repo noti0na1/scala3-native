@@ -12,8 +12,8 @@ import dotty.tools.io.Path
 /** What the compiler does differently when it is built with Scala Native.
  *
  *  This file replaces `compiler/src/dotty/tools/dotc/config/PlatformHooks.scala`
- *  in the `scala3-compiler-native` build. There is no runtime reflection,
- *  class loading or `java.lang.management`.
+ *  in the `scala3-compiler-native` build, for a platform without runtime
+ *  reflection, class loading or the JVM's management beans.
  */
 object PlatformHooks:
 
@@ -147,9 +147,10 @@ object PlatformHooks:
       case Some(className) => Success(className)
       case None => Failure(new MissingPluginException(path))
 
-  /** The executor of macro code. The native compiler cannot load code, so it
-   *  runs the macro code linked into it, which a main class registers with
-   *  `quoted.MacroRegistry` before compiling. Without any, macro expansion
+  /** The executor of macro code. The native compiler has no class loader: it
+   *  runs the macro code in `quoted.MacroRegistry`, which a main class
+   *  registers before compiling or a `quoted.MacroLoader` links and loads
+   *  when an expansion needs it (`snc-host`). Without either, macro expansion
    *  is an error.
    */
   def macroExecutor(using Context): dotty.tools.dotc.quoted.MacroExecutor = registryExecutor

@@ -2,7 +2,7 @@ package dotty.tools.dotc
 
 import java.io.{BufferedOutputStream, FileDescriptor, FileOutputStream, PrintStream, PrintWriter}
 
-import dotty.tools.dotc.config.{CommandLineParser, CompilerCommand, PlatformHooks, Properties}
+import dotty.tools.dotc.config.{CommandLineParser, CompilerCommand, PlatformHooks, Properties, SncDistribution}
 import dotty.tools.dotc.config.Settings.Setting
 import dotty.tools.dotc.core.Contexts.*
 import dotty.tools.dotc.core.Decorators.toMessage
@@ -158,7 +158,7 @@ object SncDriver extends NativeDriver:
 
     setupJdk()
     if s.scalajs.value then
-      report.error("-scalajs is not supported: snc has no Scala.js backend yet")
+      report.error("-scalajs is not supported: snc has no Scala.js backend")
     if eventsMode && s.Yreporter.wasSetByUser then
       report.error("-Yreporter cannot be combined with --events or --events-text")
     // Plugins are loaded now, so that an -Xplugin path to a plugin that is not
@@ -251,6 +251,7 @@ object SncDriver extends NativeDriver:
       import dotty.tools.tasty.TastyFormat.*
       obj("major" -> MajorVersion.toString, "minor" -> MinorVersion.toString,
         "experimental" -> ExperimentalVersion.toString)
+    val distribution = SncDistribution.find(SncExecutable.executableDir())
     obj(
       "name" -> str("snc"),
       "scalaVersion" -> str(SncBuildInfo.scalaVersion),
@@ -266,5 +267,7 @@ object SncDriver extends NativeDriver:
       "defaultBackend" -> str("native"),
       "plugins" -> arr(plugins),
       "eventsProtocol" -> str(SncEvents.protocol),
-      "executable" -> opt(SncExecutable.executablePath()))
+      "executable" -> opt(SncExecutable.executablePath()),
+      "distribution" -> opt(distribution.map(_.version)),
+      "repository" -> opt(distribution.flatMap(_.repositoryUri)))
 end SncDriver

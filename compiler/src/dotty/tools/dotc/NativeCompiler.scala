@@ -71,8 +71,12 @@ class WriteTasty extends Phase:
   override def runOn(units: List[CompilationUnit])(using Context): List[CompilationUnit] =
     val writer = FileWriters.TastyWriter(ctx.settings.outputDir.value)
     try
-      // Like the JVM backend, write no TASTy for Java sources (-Xjava-tasty)
-      for unit <- units if !unit.isJava; (cls, pickled) <- unit.pickled do
+      // Like the JVM backend, write no TASTy for Java sources (-Xjava-tasty).
+      // A unit compiled again after a suspension still holds the pickles of
+      // its earlier run's classes, whose symbols are stale: skip them. The JVM
+      // backend looks pickles up by the classes it generates, so it never
+      // sees them
+      for unit <- units if !unit.isJava; (cls, pickled) <- unit.pickled if cls.defRunId == ctx.runId do
         writer.writeTasty(internalName(cls), pickled())
     finally writer.close()
     units

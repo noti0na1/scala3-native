@@ -699,8 +699,11 @@ class Namer { typer: Typer =>
         }
     }
 
-    val classDef  = mutable.Map.empty[TypeName, TypeDef]
-    val moduleDef = mutable.Map.empty[TypeName, TypeDef]
+    // In source order: companion links and absent companions are created
+    // while iterating them, and symbol ids, which other orders follow, must
+    // not depend on how names hash
+    val classDef  = mutable.LinkedHashMap.empty[TypeName, TypeDef]
+    val moduleDef = mutable.LinkedHashMap.empty[TypeName, TypeDef]
 
     /** Create links between companion object and companion class.
      *  Populate `moduleDef` and `classDef` as a side effect.

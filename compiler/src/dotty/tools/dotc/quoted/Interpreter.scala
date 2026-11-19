@@ -171,12 +171,19 @@ class Interpreter(pos: SrcPos, executor: MacroExecutor)(using Context):
         val sw = new StringWriter()
         sw.write("Exception occurred while executing macro expansion.\n")
         if (!ctx.settings.Ydebug.value) {
-          val className = fn.owner.fullName.toString
-          val methodName = fn.name.toString
-          val end = targetException.getStackTrace.lastIndexWhere { x =>
+          // The trace up to the macro implementation's frame, which names its
+          // class and method as compiled (`$plus` for `+`, `A$B$`); without
+          // one (an implementation inlined into its caller, an exception of a
+          // module's initializer), up to the interpreter's and its executors'
+          val className = fn.owner.binaryClassName
+          val methodName = fn.name.mangledString
+          val stackTrace = targetException.getStackTrace
+          val end = stackTrace.lastIndexWhere { x =>
             x.getClassName == className && x.getMethodName == methodName
           }
-          val shortStackTrace = targetException.getStackTrace.take(end + 1)
+          val shortStackTrace =
+            if end >= 0 then stackTrace.take(end + 1)
+            else stackTrace.takeWhile(!_.getClassName.startsWith("dotty.tools.dotc.quoted."))
           targetException.setStackTrace(shortStackTrace)
           targetException.printStackTrace(new PrintWriter(sw))
 

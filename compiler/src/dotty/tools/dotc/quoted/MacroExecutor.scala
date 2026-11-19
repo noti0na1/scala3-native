@@ -25,7 +25,10 @@ import dotty.tools.dotc.util.SrcPos
  *  report them. An executor reports its own failures, such as code that it
  *  cannot find, as an `Interpreter.StopInterpretation` at `pos`, the
  *  position of the macro call, or it suspends the compilation unit
- *  (`Interpreter.suspendOnMissing`).
+ *  (`Interpreter.suspendOnMissing`). When the code is missing because this
+ *  run compiles it and the unit cannot be suspended (a REPL line), the
+ *  inliner has already reported the macro: the executor then stops the
+ *  expansion with a `StopMacroExpansion`, which adds no error.
  */
 trait MacroExecutor:
 

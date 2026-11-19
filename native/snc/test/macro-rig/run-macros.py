@@ -12,8 +12,11 @@ file, as in vulpix's run tests.
   run-macros.py prepare [tests...]   compile the macro groups with the JVM compiler
   run-macros.py rig                  generate the rig's glue and link the rig
   run-macros.py run [tests...]       compile the last groups with the rig, link, run
+  run-macros.py exec [tests...]      the same with snc-host ($SNC), which links and
+                                     loads the macro groups' code itself
   run-macros.py baseline [tests...]  the same with the JVM compiler instead of the rig
   run-macros.py joint [tests...]     compile the joint tests (same-run macros) with the rig
+  run-macros.py joint-exec [tests...]  compile the joint tests with snc-host, link, run
   run-macros.py report               summarize results
 
 Configuration, from the environment:
@@ -27,6 +30,7 @@ Configuration, from the environment:
   LINK_CP_FILE  USER_CP plus the NIR of the Scala library, for linking
   SNC_CP_FILE   snc's link class path
   SNLINK, RIG_GEN, LINK_RIG (link-rig.sh)
+  SNC           snc-host, for exec and joint-exec
   RIG_MODE      snlink mode for the rig (default release-fast)
   RIG_EXTRA_MANIFEST, RIG_STUBS, RIG_EXTRA_CP
                 more rig-gen scopes (macro libraries), stubs, and the class path
@@ -272,6 +276,12 @@ def last_group_one(test, gs, mode, worker):
         cmd = [str(WORK / "rig" / "link" / "snc-rig"), "-scalanative", "-classpath", cp, "-d", str(out)] + \
               DEFAULT_OPTIONS + directive_options(files) + [str(f) for f in files]
         code, log, secs = run(cmd, env=env)
+    elif mode == "exec":
+        env = dict(ENV, SNC_MACRO_LOG=str(test_work(test) / "exec-macros.log"))
+        (test_work(test) / "exec-macros.log").unlink(missing_ok=True)
+        cmd = [ENV["SNC"], "-scalanative", "-classpath", cp, "-d", str(out)] + \
+              DEFAULT_OPTIONS + directive_options(files) + [str(f) for f in files]
+        code, log, secs = run(cmd, env=env)
     else:
         code, log, secs = jvm_compile(files, out, cp)
     (test_work(test) / f"{mode}-compile.log").write_text(log)
@@ -331,13 +341,51 @@ def cmd_joint(only):
         print(f"{result['status']:15} {test}", flush=True)
 
 
+def joint_exec_one(test, gs, worker):
+    """Compiles a joint test with snc-host, which runs the macros it defines
+    after their run, then links and runs it."""
+    files = [f for g in gs for f in g]
+    out = test_work(test) / "joint-exec-out"
+    shutil.rmtree(out, ignore_errors=True)
+    out.mkdir(parents=True)
+    env = dict(ENV, SNC_MACRO_LOG=str(test_work(test) / "joint-exec-macros.log"))
+    (test_work(test) / "joint-exec-macros.log").unlink(missing_ok=True)
+    cmd = [ENV["SNC"], "-scalanative", "-classpath", read("USER_CP_FILE"),
+           "-d", str(out)] + DEFAULT_OPTIONS + directive_options(files) + [str(f) for f in files]
+    code, log, secs = run(cmd, env=env)
+    (test_work(test) / "joint-exec-compile.log").write_text(log)
+    if code != 0:
+        result = {"status": "compile-failed", "compile_secs": secs, "log": log[-4000:]}
+    else:
+        result = link_and_run(test, [out], WORK / "link" / f"j{worker}")
+        result["compile_secs"] = secs
+    save(test, "joint-exec", result)
+    return test, result
+
+
+def cmd_joint_exec(only):
+    tests = [t for t in discover(only) if t[1] == "joint"]
+    import threading
+    local = threading.local()
+    counter = iter(range(10 ** 6))
+
+    def work(t):
+        if not hasattr(local, "id"):
+            local.id = next(counter)
+        return joint_exec_one(t[0], t[2], local.id)
+
+    with concurrent.futures.ThreadPoolExecutor(JOBS) as pool:
+        for test, result in pool.map(work, tests):
+            print(f"{result['status']:15} {test}", flush=True)
+
+
 def cmd_report():
     tests = discover()
     kinds = {}
     for name, kind, _ in tests:
         kinds.setdefault(kind, []).append(name)
     print("tests: " + ", ".join(f"{k} {len(v)}" for k, v in sorted(kinds.items())))
-    for mode in ("rig", "baseline"):
+    for mode in ("rig", "exec", "baseline"):
         counts = {}
         for name in kinds.get("separate", []):
             r = load(name, mode)
@@ -356,6 +404,21 @@ def cmd_report():
         rig_only += rp and not bp
         base_only += bp and not rp
     print(f"\npass in both: {both}; rig only: {rig_only}; baseline only: {base_only}")
+    # The executor against the rig
+    both = exec_only = rig_only = 0
+    for name in kinds.get("separate", []):
+        e, r = load(name, "exec"), load(name, "rig")
+        ep = e is not None and e["status"] == "pass"
+        rp = r is not None and r["status"] == "pass"
+        both += ep and rp
+        exec_only += ep and not rp
+        rig_only += rp and not ep
+    print(f"exec and rig: {both}; exec only: {exec_only}; rig only: {rig_only}")
+    counts = {}
+    for name in kinds.get("joint", []):
+        r = load(name, "joint-exec")
+        counts.setdefault(r["status"] if r else "not-run", []).append(name)
+    print("\njoint-exec: " + ", ".join(f"{k} {len(v)}" for k, v in sorted(counts.items())))
 
 
 def main():
@@ -368,6 +431,10 @@ def main():
         cmd_rig()
     elif cmd == "run":
         cmd_last("rig", args)
+    elif cmd == "exec":
+        cmd_last("exec", args)
+    elif cmd == "joint-exec":
+        cmd_joint_exec(args)
     elif cmd == "baseline":
         cmd_last("baseline", args)
     elif cmd == "joint":

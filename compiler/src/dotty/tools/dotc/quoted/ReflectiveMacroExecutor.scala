@@ -30,7 +30,7 @@ class ReflectiveMacroExecutor(classLoader0: ClassLoader)(using Context) extends 
       new AbstractFileClassLoader(ctx.settings.outputDir.value, ctx.settings.javaOutputVersion.value, classLoader0)
     else classLoader0
 
-  /** Makes the class loader the thread's context class loader meanwhile. */
+  /** Runs `body` with the class loader as the thread's context class loader. */
   override def run[T](body: => T)(using Context): T =
     val oldContextClassLoader = Thread.currentThread().getContextClassLoader
     Thread.currentThread().setContextClassLoader(classLoader)
@@ -60,14 +60,26 @@ class ReflectiveMacroExecutor(classLoader0: ClassLoader)(using Context) extends 
   def loadModule(sym: Symbol, pos: SrcPos)(using Context): Object =
     if (sym.owner.is(Package)) {
       // is top level object
-      val moduleClass = loadClass(sym.fullName.toString, pos)
+      val moduleClass = loadModuleClass(sym, sym.fullName.toString, pos)
       moduleClass.getField(str.MODULE_INSTANCE_FIELD).get(null)
     }
     else {
       // nested object in an object
-      val clazz = loadClass(sym.binaryClassName, pos)
+      val clazz = loadModuleClass(sym, sym.binaryClassName, pos)
       clazz.getConstructor().newInstance().asInstanceOf[Object]
     }
+
+  /** The class `name` of the module class `sym`. In a unit that cannot be
+   *  suspended, such as a REPL line, a module that this run compiles has no
+   *  class yet, and the inliner has already reported the macro as defined in
+   *  the same source file or run: the expansion stops without another error,
+   *  as with the native executor.
+   */
+  private def loadModuleClass(sym: Symbol, name: String, pos: SrcPos)(using Context): Class[?] =
+    try loadClass(name, pos)
+    catch
+      case _: ClassNotFoundException if sym.isDefinedInCurrentRun && ctx.reporter.errorsReported =>
+        throw new scala.quoted.runtime.StopMacroExpansion
 
   private def loadClass(name: String, pos: SrcPos)(using Context): Class[?] =
     try classLoader.loadClass(name)

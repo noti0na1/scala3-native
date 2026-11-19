@@ -81,10 +81,10 @@ object RigGen:
   /** Methods to replace with stubs, by class and method name, with the
    *  reason: lines `<class> <method> <reason>`, separated by tabs. They are
    *  methods of macro code whose closure does not link, or does not work,
-   *  for want of JDK APIs: the stub throws an `UnsupportedOperationException`
-   *  only if the macro runs it. A reason that starts with `=identity` makes
-   *  the stub return its first argument instead, for a method whose result
-   *  is only cosmetic.
+   *  because it needs JDK APIs that javalib lacks: the stub throws an
+   *  `UnsupportedOperationException` only if the macro runs it. A reason
+   *  that starts with `=identity` makes the stub return its first argument
+   *  instead, for a method whose result is only cosmetic.
    */
   def readStubs(file: Path): Map[(String, String), String] =
     scala.io.Source.fromFile(file.toFile).getLines().map(_.trim).filter(l => l.nonEmpty && !l.startsWith("#")).map { line =>

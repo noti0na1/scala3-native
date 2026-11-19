@@ -1,0 +1,15 @@
+-- Error: tests/neg-macros/macro-exception-nested-owner/Test_2.scala:3:27 ----------------------------------------------
+3 |def test = Outer.Inner.boom(1) // error
+  |           ^^^^^^^^^^^^^^^^^^^
+  |           Exception occurred while executing macro expansion.
+  |           java.lang.IllegalStateException: boom
+  |           	at Outer$Inner$.helper(Macro_1.scala:10)
+  |           	at Outer$Inner$.boomImpl(Macro_1.scala:7)
+  |
+  |---------------------------------------------------------------------------------------------------------------------
+  |Inline stack trace
+  |- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  |This location contains code that was inlined from Macro_1.scala:5
+5 |    inline def boom(inline x: Int): Int = ${ boomImpl('x) }
+  |                                          ^^^^^^^^^^^^^^^^^
+   ---------------------------------------------------------------------------------------------------------------------

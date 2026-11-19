@@ -2011,10 +2011,12 @@ final class SearchRoot extends SearchHistory:
    */
   var nestedSearches: Int = 0
 
-  /** The dictionary of recursive implicit types and corresponding terms for this search. */
-  var myImplicitDictionary: mutable.Map[Type, (TermRef, tpd.Tree)] | Null = null
+  /** The dictionary of recursive implicit types and corresponding terms for this search,
+   *  in insertion order: it is emitted in its order, which must not depend on type hashes.
+   */
+  var myImplicitDictionary: mutable.LinkedHashMap[Type, (TermRef, tpd.Tree)] | Null = null
   private def implicitDictionary =
-    initialize(myImplicitDictionary, myImplicitDictionary = _,  mutable.Map.empty[Type, (TermRef, tpd.Tree)])
+    initialize(myImplicitDictionary, myImplicitDictionary = _,  mutable.LinkedHashMap.empty[Type, (TermRef, tpd.Tree)])
 
   /**
    * Link a reference to an under-construction implicit for the provided type to its

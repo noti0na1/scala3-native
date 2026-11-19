@@ -4,7 +4,7 @@ package dotty.tools.dotc.config
  *
  *  This is the JVM implementation. The Scala Native build of the compiler
  *  (`scala3-compiler-native`) replaces this file with one for a platform
- *  without runtime reflection, class loading or `java.lang.management`.
+ *  without runtime reflection, class loading or the JVM's management beans.
  */
 object PlatformHooks:
 
@@ -19,7 +19,7 @@ object PlatformHooks:
    *  constructor. Throws a `ReflectiveOperationException` when that fails.
    */
   def newInstance(className: String): Any =
-    Class.forName(className).nn.getDeclaredConstructor().nn.newInstance()
+    Class.forName(className).getDeclaredConstructor().newInstance()
 
   /** The parameter names of the first public constructor of the class named
    *  `className`, if the class can be inspected.

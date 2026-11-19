@@ -24,9 +24,23 @@ abstract class MacroInvokers:
    */
   def invoke(index: Int, receiver: Object, args: Array[Object]): Object
 
-/** The macro code that is linked into the native compiler, which cannot load
- *  code. A test build of `snc` that has macro implementations linked in
- *  registers them here before compiling.
+/** Makes macro code available to `MacroRegistry` when an expansion first needs
+ *  it, in a compiler that can link and load code: `snc-host` installs one,
+ *  which links the class path entry that holds the code as an extension of
+ *  the running compiler, loads it and registers its entries.
+ */
+trait MacroLoader:
+  /** Registers the entries of the macro code in `owner`'s class path entry
+   *  (a jar or directory, or the output directory for a class compiled by an
+   *  earlier run), unless they are registered already, and returns whether it
+   *  registered any. Throws `StopInterpretation` at `pos` if the code does not
+   *  link or load.
+   */
+  def load(owner: Symbol, pos: SrcPos)(using Context): Boolean
+
+/** The macro code that the native compiler runs: code linked into it, which
+ *  a main class registers before compiling (the macro test rig), and code that
+ *  a `MacroLoader` links and loads when an expansion needs it (`snc-host`).
  *
  *  Entries are registered in scopes. The entries of the scope "" are always
  *  visible; those of other scopes only when the environment variable
@@ -76,8 +90,16 @@ object MacroRegistry:
     registered += ((scope, keys, invokers))
     indexed = null
 
-  /** Whether any macro code is linked in. */
+  /** Whether any macro code is linked in or loaded. */
   def nonEmpty: Boolean = registered.nonEmpty
+
+  @volatile private var installedLoader: MacroLoader | Null = null
+
+  /** Makes `loader` load the macro code that expansions need. */
+  def installLoader(loader: MacroLoader): Unit = installedLoader = loader
+
+  /** The loader of macro code, if this compiler can load code. */
+  def loader: MacroLoader | Null = installedLoader
 
   /** The scopes that are registered, other than "". */
   def scopes: List[String] = registered.map(_._1).filter(_.nonEmpty).distinct.toList
@@ -134,33 +156,59 @@ class RegistryMacroExecutor extends MacroExecutor:
     find('C', owner, owner.binaryClassName, field.name.mangledString, 0, Nil, field, pos)
       .invoke(module, Nil)
 
-  /** The entry for `sym`, or an error that says why there is none. */
+  /** The entry for `sym`, or an error that says why there is none. With a
+   *  `MacroLoader`, a miss loads the macro code of `owner`'s class path
+   *  entry, and code that this run compiles suspends the compilation unit
+   *  until the run is over, as on the JVM.
+   */
   private def find(kind: Char, owner: Symbol, className: String, name: String, arity: Int,
       types: List[String], sym: Symbol, pos: SrcPos)(using Context): Entry =
     val file = owner.associatedFile
-    if file != null && !file.ext.isScalaBinary then
-      // Defined in the sources of this run: an entry of that name is other code
+    val loader = MacroRegistry.loader
+    if file != null && !file.ext.isScalaBinary && (loader == null || owner.isDefinedInCurrentRun) then
+      // Defined in the sources of this run: its code exists only once the
+      // run is over, so an entry with that name belongs to other code
+      if loader != null && ctx.compilationUnit.isSuspendable then
+        Interpreter.suspendOnMissing(owner, Interpreter.ClassOrigin.Source, pos)
+      if loader != null && kind != 'N' && ctx.reporter.errorsReported then
+        // A unit that cannot be suspended (a REPL line): the inliner has
+        // already reported the macro as defined in the same source or run
+        throw new scala.quoted.runtime.StopMacroExpansion
       throw new StopInterpretation(notFound(owner, sym), pos)
-    lookup(kind, className, name, arity) match
-      case entry :: Nil => entry
-      case Nil => throw new StopInterpretation(notFound(owner, sym), pos)
+    def select(entries: List[Entry]): Option[Entry] = entries match
+      case Nil => None
+      case entry :: Nil => Some(entry)
       case entries =>
         val wanted = if types.isEmpty then "-" else types.mkString(",")
         entries.filter(_.key.types == wanted) match
-          case entry :: _ => entry
+          case entry :: _ => Some(entry)
           case Nil => throw new StopInterpretation(
             em"Cannot run ${sym.showLocated} in a macro: no entry of the macro registry has its parameter types ($wanted), only ${entries.map(_.key.types).mkString("; ")}", pos)
+    select(lookup(kind, className, name, arity))
+      .orElse:
+        if loader != null && loader.load(owner, pos) then select(lookup(kind, className, name, arity))
+        else None
+      .getOrElse(throw new StopInterpretation(notFound(owner, sym), pos))
 
   private def notFound(owner: Symbol, sym: Symbol)(using Context) =
     val file = owner.associatedFile
     val what =
       if sym.is(Method) && !sym.isConstructor then i"the macro implementation ${sym.name} in ${owner.showLocated}"
       else i"${sym.showLocated}"
+    val loads = MacroRegistry.loader != null
     if file != null && !file.ext.isScalaBinary then
-      em"""Cannot expand this macro: $what is defined in $file, which this compilation run compiles.
-          |snc runs only macro code from the class path: compile the macro definitions first, in a separate compilation"""
+      if loads then
+        em"""Cannot expand this macro: $what is defined in $file, which this compilation run compiles,
+            |and its code runs only once the run is over""" // the unit could not be suspended
+      else
+        em"""Cannot expand this macro: $what is defined in $file, which this compilation run compiles.
+            |This snc runs only macro code from the class path: compile the macro definitions first, in a separate compilation, or use snc-host, which links and loads macro code"""
+    else if loads then
+      em"""Cannot expand this macro: $what${fromFile(file)} has no macro entry in its compiled code.
+          |snc-host runs macro code compiled to NIR by Scala Native's compiler plugin: the NIR must be next to the TASTy"""
     else if !MacroRegistry.nonEmpty then
-      em"""Macro expansion is not supported by the native compiler yet: it cannot run $what${fromFile(file)}"""
+      em"""Macro expansion is not supported by this snc: it cannot run $what${fromFile(file)}.
+          |snc-host, the same compiler linked as a live-execution host, links and loads macro code"""
     else
       val scopes = MacroRegistry.scopes
       val scopeHint =
@@ -169,7 +217,7 @@ class RegistryMacroExecutor extends MacroExecutor:
           val active = MacroRegistry.activeScopes
           s"\nIts registry has scopes that SNC_MACRO_SCOPES makes visible; visible now: ${if active.isEmpty then "none" else active.mkString(", ")}"
       em"""Cannot expand this macro: $what${fromFile(file)} is not in the macro registry of this compiler.
-          |The native compiler cannot load macro code yet; this snc runs only the macros linked into it$scopeHint"""
+          |This snc runs only the macros linked into it$scopeHint"""
 
   private def fromFile(file: AbstractFile | Null): String =
     if file == null then "" else s" from $file"

@@ -25,47 +25,75 @@ object Md5:
 
   /** The 16-byte digest of `input`. */
   def digest(input: Array[Byte]): Array[Byte] =
-    // Append a 1 bit, zeros, and the bit length (little-endian), to a multiple of 64 bytes
+    // The blocks of the input are read in place; the rest of it, a 1 bit,
+    // zeros and the bit length (little-endian) make one or two more blocks
     val length = input.length
-    val padded = java.util.Arrays.copyOf(input, ((length + 8) / 64 + 1) * 64).nn
-    padded(length) = 0x80.toByte
+    val whole = length - length % 64
+    val rest = length - whole
+    val tail = new Array[Byte](if rest + 9 <= 64 then 64 else 128)
+    System.arraycopy(input, whole, tail, 0, rest)
+    tail(rest) = 0x80.toByte
     val bitLength = length.toLong * 8
-    for i <- 0 until 8 do
-      padded(padded.length - 8 + i) = (bitLength >>> (8 * i)).toByte
+    var i = 0
+    while i < 8 do
+      tail(tail.length - 8 + i) = (bitLength >>> (8 * i)).toByte
+      i += 1
 
-    var a0 = 0x67452301
-    var b0 = 0xefcdab89
-    var c0 = 0x98badcfe
-    var d0 = 0x10325476
+    val state = Array(0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476)
     val words = new Array[Int](16)
     var block = 0
-    while block < padded.length do
-      for j <- 0 until 16 do
-        val at = block + 4 * j
-        words(j) = (padded(at) & 0xff) | (padded(at + 1) & 0xff) << 8 |
-          (padded(at + 2) & 0xff) << 16 | (padded(at + 3) & 0xff) << 24
-      var a = a0
-      var b = b0
-      var c = c0
-      var d = d0
-      for step <- 0 until 64 do
-        val (f, word) =
-          if step < 16 then ((b & c) | (~b & d), step)
-          else if step < 32 then ((d & b) | (~d & c), (5 * step + 1) % 16)
-          else if step < 48 then (b ^ c ^ d, (3 * step + 5) % 16)
-          else (c ^ (b | ~d), (7 * step) % 16)
-        val rotated = Integer.rotateLeft(a + f + sines(step) + words(word), shifts(step))
-        a = d
-        d = c
-        c = b
-        b = b + rotated
-      a0 += a
-      b0 += b
-      c0 += c
-      d0 += d
+    while block < whole do
+      compress(state, words, input, block)
+      block += 64
+    block = 0
+    while block < tail.length do
+      compress(state, words, tail, block)
       block += 64
 
     val result = new Array[Byte](16)
-    for (word, i) <- Array(a0, b0, c0, d0).zipWithIndex; k <- 0 until 4 do
-      result(4 * i + k) = (word >>> (8 * k)).toByte
+    i = 0
+    while i < 16 do
+      result(i) = (state(i / 4) >>> (8 * (i % 4))).toByte
+      i += 1
     result
+
+  /** Adds the 64-byte block of `data` at `offset` to `state`; `words` is
+   *  where the block's words go.
+   */
+  private def compress(state: Array[Int], words: Array[Int], data: Array[Byte], offset: Int): Unit =
+    var j = 0
+    while j < 16 do
+      val at = offset + 4 * j
+      words(j) = (data(at) & 0xff) | (data(at + 1) & 0xff) << 8 |
+        (data(at + 2) & 0xff) << 16 | (data(at + 3) & 0xff) << 24
+      j += 1
+    var a = state(0)
+    var b = state(1)
+    var c = state(2)
+    var d = state(3)
+    var step = 0
+    while step < 64 do
+      var f = 0
+      var word = 0
+      if step < 16 then
+        f = (b & c) | (~b & d)
+        word = step
+      else if step < 32 then
+        f = (d & b) | (~d & c)
+        word = (5 * step + 1) % 16
+      else if step < 48 then
+        f = b ^ c ^ d
+        word = (3 * step + 5) % 16
+      else
+        f = c ^ (b | ~d)
+        word = (7 * step) % 16
+      val rotated = Integer.rotateLeft(a + f + sines(step) + words(word), shifts(step))
+      a = d
+      d = c
+      c = b
+      b = b + rotated
+      step += 1
+    state(0) += a
+    state(1) += b
+    state(2) += c
+    state(3) += d
