@@ -58,14 +58,28 @@ object JdkClassPath:
             case Some(f) => Right(Jdk(home, f))
             case None => Left(s"$releaseFile: cannot read the Java version $v")
 
+  private def ctSymOf(home: Path): Path = home.resolve("lib").resolve("ct.sym")
+  private def jmodsOf(home: Path): Path = home.resolve("jmods")
+  private def isJmod(file: Path): Boolean = file.toString.endsWith(".jmod")
+
+  /** Whether `file` is one of the archives that the class path of the JDK at
+   *  `home` reads classes from: `lib/ct.sym`, or a jmod in `jmods/`. The sbt
+   *  phases report these archives as the class path entries of the JDK's
+   *  classes.
+   */
+  def isArchive(home: Path, file: Path): Boolean =
+    val h = home.toAbsolutePath.normalize
+    val f = file.toAbsolutePath.normalize
+    f == ctSymOf(h) || (f.getParent == jmodsOf(h) && isJmod(f))
+
   /** The class path of `jdk`'s API for `release`, by default the JDK's own. */
   def apply(jdk: Jdk, release: Option[Int]): Either[String, ClassPath] =
     val n = release.getOrElse(jdk.feature)
-    val ctSym = jdk.home.resolve("lib").resolve("ct.sym")
-    val jmodsDir = jdk.home.resolve("jmods")
+    val ctSym = ctSymOf(jdk.home)
+    val jmodsDir = jmodsOf(jdk.home)
     lazy val jmods =
       val stream = Files.list(jmodsDir)
-      try stream.iterator.asScala.filter(_.toString.endsWith(".jmod")).toList.sorted
+      try stream.iterator.asScala.filter(isJmod).toList.sorted
       finally stream.close()
     if n > jdk.feature then Left(s"release $n is newer than the JDK at ${jdk.home} (${jdk.feature})")
     else if n == jdk.feature && Files.isDirectory(jmodsDir) && jmods.nonEmpty then Right(new JmodsClassPath(jmods))

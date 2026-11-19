@@ -8,6 +8,7 @@
           checkShadowing  check for elements shadowing other elements in scope
                        }  
         inlinedPositions  check inlined positions
+                sbt-deps  collects information on classes' dependencies for sbt
 extractSemanticDBExtractSemanticInfo
                           extract info into .semanticdb files
                posttyper  additional checks and cleanups after type checking
@@ -27,6 +28,7 @@ desugarSpecializedTraits      Identifies traits having type parameters that have
 postSpecializeInlineTraits
                           Fixup code after inline trait specialization
                  pickler  generates TASTy info
+                 sbt-api  sends a representation of the API of classes to sbt
                 inlining  inline and execute macros
             postInlining  add mirror support for inlined code
                  staging  check staging levels and heal staged types

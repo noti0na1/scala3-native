@@ -4,3 +4,4 @@
 -Ypickle-write early.jar -d out -classpath @CP@ Hello.scala
 -Yreporter:com.example.MyReporter -d out -classpath @CP@ Hello.scala
 --events-text -Yreporter:dotty.tools.dotc.reporting.ConsoleReporter -d out -classpath @CP@ Hello.scala
+--analysis -d out -classpath @CP@ Hello.scala

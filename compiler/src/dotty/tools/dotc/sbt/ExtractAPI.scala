@@ -92,7 +92,8 @@ class ExtractAPI extends Phase {
 
   private def recordNonLocalClass(cls: Symbol, sourceFile: SourceFile, cb: interfaces.IncrementalCallback)(using Context): Unit =
     def registerProductNames(fullClassName: String, binaryClassName: String) =
-      val pathToClassFile = s"${binaryClassName.replace('.', java.io.File.separatorChar)}.class"
+      val pathToClassFile =
+        binaryClassName.replace('.', java.io.File.separatorChar) + config.PlatformHooks.classFileExtension
 
       val outDir = ctx.settings.outputDir.value
       val classFile = {

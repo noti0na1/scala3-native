@@ -4,7 +4,7 @@ import json, struct, sys
 data = open(sys.argv[1], "rb").read()
 assert data[:4] == b"SNCE", data[:4]
 major, minor = struct.unpack(">HH", data[4:8])
-assert (major, minor) == (1, 0), (major, minor)
+assert (major, minor) == (1, 1), (major, minor)
 i, events = 8, []
 while i < len(data):
     (n,) = struct.unpack(">I", data[i:i + 4])

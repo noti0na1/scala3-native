@@ -99,6 +99,21 @@ major authors were omitted by oversight.
   * The Dotty codebase contains parts which are derived from
     the ScalaPB protobuf library [6], which is under the Apache 2.0 license.
 
+  * native/sbt-interfaces: Scala versions of the `xsbti.api` classes and of
+    `xsbti.UseScope` from Zinc's compiler-interface 1.12.1 [7], which the sbt
+    phases of the native compiler use: generated from the interface's Java
+    sources by native/sbt-interfaces/generate.py, and the hand-written ones
+    ported by hand. Zinc is under the Apache License, Version 2.0; each file
+    keeps Zinc's license header. Zinc's NOTICE file says, of the parts that
+    pertain to these files:
+
+        Zinc
+        Copyright 2023, Scala center
+        Copyright 2011 - 2022, Lightbend, Inc.
+        Copyright 2008 - 2010, Mark Harrah
+
+        Licensed under the Apache License, Version 2.0 (the "License").
+
 
 [1] https://github.com/scala/scala
 [2] https://github.com/adriaanm/scala/tree/sbt-api-consolidate/src/compiler/scala/tools/sbt
@@ -106,3 +121,4 @@ major authors were omitted by oversight.
 [4] https://github.com/scoverage/scalac-scoverage-plugin
 [5] https://github.com/scalameta/metals
 [6] https://github.com/scalapb/protobuf-scala-runtime
+[7] https://github.com/sbt/zinc

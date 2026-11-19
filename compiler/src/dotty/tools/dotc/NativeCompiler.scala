@@ -13,11 +13,11 @@ import dotty.tools.io.FileWriters
 
 /** The compiler as built with Scala Native (`scala3-compiler-native`).
  *
- *  It leaves out the phases that need the JVM: the sbt phases, which talk to
- *  Zinc through `xsbti`, and the JVM and Scala.js backends. For now it emits
- *  TASTy only, with `WriteTasty`. The phase lists copy `Compiler`'s;
- *  `NativeCompilerTest` checks that they only differ by the phases left out
- *  and added.
+ *  It leaves out the JVM and Scala.js backends. For now it emits TASTy only,
+ *  with `WriteTasty` (and NIR with the Scala Native plugin). The sbt phases
+ *  run when there is an incremental callback, as in `Compiler`. The phase
+ *  lists copy `Compiler`'s; `NativeCompilerTest` checks that they only differ
+ *  by the phases left out and added.
  */
 class NativeCompiler extends Compiler {
 
@@ -28,6 +28,7 @@ class NativeCompiler extends Compiler {
          CheckUnused.PostTyper(),
          CheckShadowing()) ::
     List(new YCheckPositions) ::
+    List(new sbt.ExtractDependencies) ::
     List(new semanticdb.ExtractSemanticInfo) ::
     List(new PostTyper) ::
     List(new UnrollDefinitions) ::
@@ -41,6 +42,7 @@ class NativeCompiler extends Compiler {
 
   override protected def picklerPhases: List[List[Phase]] =
     List(new Pickler) ::
+    List(new sbt.ExtractAPI) ::
     List(new Inlining) ::
     List(new PostInlining) ::
     List(new Staging) ::
@@ -56,7 +58,7 @@ class NativeCompiler extends Compiler {
 object NativeCompiler:
   /** Phases of `Compiler` that `NativeCompiler` leaves out. */
   val leftOutPhases: Set[String] =
-    Set("sbt-deps", "sbt-api", "genSJSIR", "genBCode")
+    Set("genSJSIR", "genBCode")
 
   /** Phases of `NativeCompiler` that `Compiler` does not have. */
   val addedPhases: List[String] = List(WriteTasty.name)

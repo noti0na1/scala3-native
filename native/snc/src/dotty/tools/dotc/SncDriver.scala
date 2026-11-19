@@ -18,7 +18,9 @@ import dotty.tools.dotc.reporting.Reporter
  *    running it (`classpath.JdkClassPath`);
  *  - `--about`: print what this `snc` is, as JSON, and exit;
  *  - `--events`, `--events-text`: report on standard output as an event
- *    stream (see `SncEvents`), and print text to standard error.
+ *    stream (see `SncEvents`), and print text to standard error;
+ *  - `--analysis` (with `--events` or `--events-text`): run the sbt phases
+ *    and send Zinc's analysis as events too (see `SncAnalysis`).
  */
 object SncDriver extends NativeDriver:
 
@@ -70,7 +72,8 @@ object SncDriver extends NativeDriver:
       if expanded.contains("--events") then Some(Events.Binary)
       else if expanded.contains("--events-text") then Some(Events.Text)
       else None
-    val sncOptions = Set("--about", "--events", "--events-text", "-scalanative")
+    val analysis = expanded.contains("--analysis")
+    val sncOptions = Set("--about", "--events", "--events-text", "--analysis", "-scalanative")
     val compilerArgs = javaHomeOption(expanded.filterNot(sncOptions)) match
       case Right((home, other)) =>
         javaHome = home
@@ -83,7 +86,7 @@ object SncDriver extends NativeDriver:
       println(aboutJson)
       Exit.Ok
     else events match
-      case None => guarded(compile(compilerArgs, None))
+      case None => guarded(compile(compilerArgs, None, analysis))
       case Some(format) =>
         // Standard output carries the events only
         val stdout = new BufferedOutputStream(new FileOutputStream(FileDescriptor.out), 1 << 16)
@@ -94,7 +97,7 @@ object SncDriver extends NativeDriver:
         System.setOut(stderr)
         val reporter = new SncEvents.EventReporter(sink, new PrintWriter(stderr, true))
         sink.emit(SncEvents.startEvent)
-        val exit = Console.withOut(stderr)(guarded(compile(compilerArgs, Some(reporter))))
+        val exit = Console.withOut(stderr)(guarded(compile(compilerArgs, Some((reporter, sink)), analysis)))
         sink.emit(SncEvents.doneEvent(exit, reporter.errorCount, reporter.warningCount))
         sink.close()
         exit
@@ -110,9 +113,15 @@ object SncDriver extends NativeDriver:
       ex.printStackTrace(System.err)
       Exit.Crash
 
-  private def compile(args: Array[String], reporter: Option[Reporter]): Int =
+  /** Compiles, reporting to the event stream's reporter and sink if there is
+   *  one, and sending Zinc's analysis to the sink with `analysis`.
+   */
+  private def compile(args: Array[String], events: Option[(Reporter, SncEvents.Sink)], analysis: Boolean): Int =
     val rootCtx = initCtx.fresh
-    reporter.foreach(rootCtx.setReporter)
+    events.foreach((reporter, _) => rootCtx.setReporter(reporter))
+    if analysis && events.isEmpty then
+      report.error("--analysis requires --events or --events-text")(using rootCtx)
+      return Exit.Usage
     val jars = jarOutputs(args.toList)
     if jars.nonEmpty then
       for (option, jar) <- jars do
@@ -120,10 +129,16 @@ object SncDriver extends NativeDriver:
       return Exit.Usage
     setup(args, rootCtx) match
       case Some((files, ctx)) =>
-        checkSetup(eventsMode = reporter.isDefined)(using ctx)
+        checkSetup(eventsMode = events.isDefined)(using ctx)
         if ctx.reporter.hasErrors then Exit.Usage
         else
-          val result = doCompile(newCompiler(using ctx), files)(using ctx)
+          val compileCtx = events match
+            case Some((_, sink)) if analysis =>
+              val jdkArchive = (file: java.nio.file.Path) =>
+                jdkHome.exists(dotty.tools.dotc.classpath.JdkClassPath.isArchive(_, file))
+              ctx.fresh.setIncCallback(new SncAnalysis.Callback(sink, files, jdkArchive))
+            case _ => ctx
+          val result = doCompile(newCompiler(using compileCtx), files)(using compileCtx)
           if result.hasErrors then Exit.Errors else Exit.Ok
       case None =>
         // -help, -version, no sources, or a bad command line
@@ -181,7 +196,6 @@ object SncDriver extends NativeDriver:
     )("snc emits no JVM bytecode")
     warnIfSet(s.scalajsGenStaticForwardersForNonTopLevelObjects, s.scalajsMapSourceURI)(
       "snc has no Scala.js backend")
-    warnIfSet(s.YforceSbtPhases, s.YdumpSbtInc)("snc does not run the sbt phases yet")
     checkScalaLibrary()
   end checkSetup
 
@@ -267,6 +281,7 @@ object SncDriver extends NativeDriver:
       "defaultBackend" -> str("native"),
       "plugins" -> arr(plugins),
       "eventsProtocol" -> str(SncEvents.protocol),
+      "analysis" -> "true",
       "executable" -> opt(SncExecutable.executablePath()),
       "distribution" -> opt(distribution.map(_.version)),
       "repository" -> opt(distribution.flatMap(_.repositoryUri)))

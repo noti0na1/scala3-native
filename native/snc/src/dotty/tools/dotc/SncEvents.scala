@@ -20,7 +20,8 @@ object SncEvents:
    *  fields and frame kinds, which readers skip.
    */
   val major = 1
-  val minor = 0
+  /** 1.1 adds the events of Zinc's analysis (`--analysis`, see `SncAnalysis`). */
+  val minor = 1
   def protocol: String = s"$major.$minor"
 
   /** The binary stream starts with these four bytes, then the major and minor
@@ -31,9 +32,12 @@ object SncEvents:
   /** The kind of a frame whose payload is one event as a UTF-8 JSON object. */
   val JsonFrame: Byte = 1
 
-  /** Where events go. Each event is a JSON object with an `"event"` field. */
+  /** Where events go. Each event is a JSON object with an `"event"` field.
+   *  An event is flushed at once unless `flush` is false, as for the many
+   *  small events of the analysis, which clients read after `done` anyway.
+   */
   sealed abstract class Sink(out: OutputStream):
-    def emit(event: String): Unit
+    def emit(event: String, flush: Boolean = true): Unit
     def close(): Unit = out.flush()
 
   /** Frames: a 32-bit big-endian length of what follows it, a kind byte
@@ -48,7 +52,7 @@ object SncEvents:
       out.write((n >>> 8) & 0xff)
       out.write(n & 0xff)
 
-    def emit(event: String): Unit =
+    def emit(event: String, flush: Boolean = true): Unit =
       val payload = event.getBytes(StandardCharsets.UTF_8).nn
       val length = payload.length + 1
       out.write((length >>> 24) & 0xff)
@@ -57,14 +61,14 @@ object SncEvents:
       out.write(length & 0xff)
       out.write(JsonFrame.toInt)
       out.write(payload)
-      out.flush()
+      if flush then out.flush()
 
   /** One event per line. */
   final class TextSink(out: OutputStream) extends Sink(out):
-    def emit(event: String): Unit =
+    def emit(event: String, flush: Boolean = true): Unit =
       out.write(event.getBytes(StandardCharsets.UTF_8).nn)
       out.write('\n')
-      out.flush()
+      if flush then out.flush()
 
   def startEvent: String =
     Json.obj(
@@ -163,9 +167,16 @@ object Json:
 
   /** A JSON string, in ASCII: other characters are `\\u` escapes. */
   def str(s: String): String =
-    val sb = new StringBuilder(s.length + 2)
+    val sb = new java.lang.StringBuilder(s.length + 2)
+    appendStr(sb, s)
+    sb.toString
+
+  /** Appends `s` to `sb` as `str` writes it. */
+  def appendStr(sb: java.lang.StringBuilder, s: String): Unit =
     sb.append('"')
-    for ch <- s do
+    var i = 0
+    while i < s.length do
+      val ch = s.charAt(i)
       ch match
         case '"' => sb.append("\\\"")
         case '\\' => sb.append("\\\\")
@@ -178,6 +189,6 @@ object Json:
           val hex = Integer.toHexString(ch)
           sb.append("\\u").append("0" * (4 - hex.length)).append(hex)
         case _ => sb.append(ch)
+      i += 1
     sb.append('"')
-    sb.toString
 end Json

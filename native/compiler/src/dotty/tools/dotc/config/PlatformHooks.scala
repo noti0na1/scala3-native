@@ -157,6 +157,12 @@ object PlatformHooks:
 
   private val registryExecutor = new dotty.tools.dotc.quoted.RegistryMacroExecutor
 
+  /** The extension of the file that the backend writes for each class, which
+   *  the sbt phases report to Zinc as the class's product: the native compiler
+   *  writes NIR (with the Scala Native plugin) and no class files.
+   */
+  final val classFileExtension = ".nir"
+
   /** The timer `ImportSuggestions` uses to stop slow implicit searches, in
    *  place of `java.util.Timer`. The native compiler is single-threaded, so
    *  no task ever runs: a search for one suggestion is not cut short, but

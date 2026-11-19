@@ -187,7 +187,9 @@ trait AbstractExtractDependenciesCollector(rec: DependencyRecorder) extends tpd.
   // as it was added later to the zinc.apiinfo DependencyContext enum
   // e.g. pre 1.10.x sbt would throw java.lang.NoSuchFieldError errors here
   lazy val allowsDependencyByMacroExpansion =
-    classOf[DependencyContext].getFields().exists(_.getName() == "DependencyByMacroExpansion")
+    if config.PlatformHooks.isJvm then
+      classOf[DependencyContext].getFields().exists(_.getName() == "DependencyByMacroExpansion")
+    else true // the native compiler's own DependencyContext has it
 
   private def addMacroDependency(trees: List[Tree])(using Context): Unit =
     if (allowsDependencyByMacroExpansion) {
@@ -569,7 +571,8 @@ class DependencyRecorder {
       siblingClassfiles.getOrElseUpdate(pf, {
         val jpath = pf.jpath.nn
         val moduleSuffix = if fromClass.is(Module) then str.MODULE_SUFFIX else ""
-        jpath.getParent.resolve(jpath.getFileName.toString.stripSuffix(".tasty") + moduleSuffix + ".class")
+        jpath.getParent.resolve(jpath.getFileName.toString.stripSuffix(".tasty") + moduleSuffix +
+          config.PlatformHooks.classFileExtension)
       })
 
     def binaryDependency(path: Path, binaryClassName: String): Unit =

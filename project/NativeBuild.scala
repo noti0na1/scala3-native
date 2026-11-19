@@ -38,8 +38,9 @@ object NativeBuild {
   private val jvmCompiler = LocalProject("scala3-compiler-nonbootstrapped")
 
   /** NIR for the Java interfaces the native compiler uses, from Scala
-   *  versions of them: those in interfaces/src, and the enums of sbt's
-   *  compiler-interface that dependency tracking uses (native/sbt-interfaces).
+   *  versions of them: those in interfaces/src, and the parts of sbt's
+   *  compiler-interface that the sbt phases use, `xsbti.api` and `UseScope`
+   *  (native/sbt-interfaces).
    *  Only NIR is exported: the compiler still compiles against the Java
    *  interfaces, whose rules for `()` calls and nulls its code relies on, and
    *  NIR names do not depend on either.

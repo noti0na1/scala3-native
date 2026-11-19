@@ -1,0 +1,1 @@
+-Yforce-sbt-phases -Ydump-sbt-inc -color:never -d out -classpath @CP@ A.scala B.scala
