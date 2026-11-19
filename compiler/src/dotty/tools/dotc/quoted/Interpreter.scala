@@ -5,11 +5,9 @@ import scala.collection.mutable
 import scala.reflect.ClassTag
 
 import java.io.{PrintWriter, StringWriter}
-import java.lang.reflect.{InvocationTargetException, Method => JLRMethod}
 
 import dotty.tools.dotc.ast.tpd
 import dotty.tools.dotc.ast.TreeMapWithImplicits
-import dotty.tools.dotc.config.PlatformHooks
 import dotty.tools.dotc.core.Annotations.*
 import dotty.tools.dotc.core.Constants.*
 import dotty.tools.dotc.core.Contexts.*
@@ -26,19 +24,14 @@ import dotty.tools.dotc.quoted.*
 import dotty.tools.dotc.typer.ImportInfo.withRootImports
 import dotty.tools.dotc.util.SrcPos
 import dotty.tools.dotc.reporting.Message
-import dotty.tools.io.AbstractFileClassLoader
 import dotty.tools.dotc.core.CyclicReference
 
-/** Tree interpreter for metaprogramming constructs */
-class Interpreter(pos: SrcPos, classLoader0: ClassLoader)(using Context):
+/** Tree interpreter for metaprogramming constructs. It runs compiled code
+ *  through `executor`.
+ */
+class Interpreter(pos: SrcPos, executor: MacroExecutor)(using Context):
   import Interpreter.*
   import tpd.*
-
-  val classLoader =
-    if !PlatformHooks.isJvm then classLoader0
-    else if ctx.owner.topLevelClass.name.startsWith(str.REPL_SESSION_LINE) then
-        new AbstractFileClassLoader(ctx.settings.outputDir.value, ctx.settings.javaOutputVersion.value, classLoader0)
-    else classLoader0
 
   /** Local variable environment */
   type Env = Map[Symbol, Object]
@@ -72,10 +65,7 @@ class Interpreter(pos: SrcPos, classLoader0: ClassLoader)(using Context):
 
     // TODO disallow interpreted method calls as arguments
     case Call(fn, args) =>
-      if !PlatformHooks.isJvm then
-        // Calls run compiled macro code by reflection
-        throw new StopInterpretation(em"Macro expansion is not supported by the native compiler yet", tree.srcPos)
-      else if (fn.symbol.isConstructor)
+      if (fn.symbol.isConstructor)
         interpretNew(fn.symbol, args.flatten.map(interpretTree))
       else if (fn.symbol.is(Module))
         interpretModuleAccess(fn.symbol)
@@ -166,166 +156,52 @@ class Interpreter(pos: SrcPos, classLoader0: ClassLoader)(using Context):
     args.toSeq
 
   private def interpretedStaticMethodCall(moduleClass: Symbol, fn: Symbol, args: List[Object]): Object = {
-    val inst =
-      try loadModule(moduleClass)
-      catch
-        case MissingClassValidInCurrentRun(sym, origin) =>
-          suspendOnMissing(sym, origin, pos)
-    val clazz = inst.getClass
-    val name = fn.name.asTermName
-    val method = getMethod(clazz, name, paramsSig(fn))
-    stopIfRuntimeException(method.invoke(inst, args*), method)
+    // Loading the module runs its initializer, which is macro code too
+    try executor.callMethod(executor.loadModule(moduleClass, pos), fn, args, pos)
+    catch {
+      case ex: (StopInterpretation | CompilationUnit.SuspendException) =>
+        throw ex
+      case ex: scala.quoted.runtime.StopMacroExpansion =>
+        throw ex
+      case ex: dotty.tools.dotc.core.RecursionOverflow =>
+        throw ex
+      case MissingClassValidInCurrentRun(sym, origin) =>
+        suspendOnMissing(sym, origin, pos)
+      case targetException: Throwable =>
+        val sw = new StringWriter()
+        sw.write("Exception occurred while executing macro expansion.\n")
+        if (!ctx.settings.Ydebug.value) {
+          val className = fn.owner.fullName.toString
+          val methodName = fn.name.toString
+          val end = targetException.getStackTrace.lastIndexWhere { x =>
+            x.getClassName == className && x.getMethodName == methodName
+          }
+          val shortStackTrace = targetException.getStackTrace.take(end + 1)
+          targetException.setStackTrace(shortStackTrace)
+          targetException.printStackTrace(new PrintWriter(sw))
+
+          targetException match
+            case _: CyclicReference => sw.write("\nSee full stack trace using -Ydebug")
+            case _ =>
+        } else {
+          targetException.printStackTrace(new PrintWriter(sw))
+        }
+        sw.write("\n")
+        throw new StopInterpretation(sw.toString.toMessage, pos)
+    }
   }
 
-  private def interpretedStaticFieldAccess(sym: Symbol): Object = {
-    val clazz = loadClass(sym.owner.fullName.toString)
-    val field = clazz.getField(sym.name.toString)
-    field.get(null)
-  }
+  private def interpretedStaticFieldAccess(sym: Symbol): Object =
+    executor.staticField(sym, pos)
 
   private def interpretModuleAccess(fn: Symbol): Object =
-    loadModule(fn.moduleClass)
+    executor.loadModule(fn.moduleClass, pos)
 
-  private def interpretNew(fn: Symbol, args: List[Object]): Object = {
-    val className = fn.owner.fullName.mangledString.replaceAll("\\$\\.", "\\$")
-    val clazz = loadClass(className)
-    val constr = clazz.getConstructor(paramsSig(fn)*)
-    constr.newInstance(args*).asInstanceOf[Object]
-  }
+  private def interpretNew(fn: Symbol, args: List[Object]): Object =
+    executor.newInstance(fn, args, pos)
 
   private def unexpectedTree(tree: Tree): Object =
     throw new StopInterpretation(em"Unexpected tree could not be interpreted: ${tree.toString}", tree.srcPos)
-
-  private def loadModule(sym: Symbol): Object =
-    if (sym.owner.is(Package)) {
-      // is top level object
-      val moduleClass = loadClass(sym.fullName.toString)
-      moduleClass.getField(str.MODULE_INSTANCE_FIELD).get(null)
-    }
-    else {
-      // nested object in an object
-      val clazz = loadClass(sym.binaryClassName)
-      clazz.getConstructor().newInstance().asInstanceOf[Object]
-    }
-
-  private def loadReplLineClass(moduleClass: Symbol): Class[?] = {
-    val lineClassloader = new AbstractFileClassLoader(ctx.settings.outputDir.value, ctx.settings.javaOutputVersion.value, classLoader)
-    lineClassloader.loadClass(moduleClass.name.firstPart.toString)
-  }
-
-  private def loadClass(name: String): Class[?] =
-    try classLoader.loadClass(name)
-    catch
-      case MissingClassValidInCurrentRun(sym, origin) =>
-        suspendOnMissing(sym, origin, pos)
-
-
-  private def getMethod(clazz: Class[?], name: Name, paramClasses: List[Class[?]]): JLRMethod =
-    try clazz.getMethod(name.toString, paramClasses*)
-    catch {
-      case _: NoSuchMethodException =>
-        val msg = em"Could not find method ${clazz.getCanonicalName}.$name with parameters ($paramClasses%, %)"
-        throw new StopInterpretation(msg, pos)
-      case MissingClassValidInCurrentRun(sym, origin) =>
-        suspendOnMissing(sym, origin, pos)
-    }
-
-  private def stopIfRuntimeException[T](thunk: => T, method: JLRMethod): T =
-    try thunk
-    catch {
-      case ex: RuntimeException =>
-        val sw = new StringWriter()
-        sw.write("A runtime exception occurred while executing macro expansion\n")
-        sw.write(ex.getMessage)
-        sw.write("\n")
-        ex.printStackTrace(new PrintWriter(sw))
-        sw.write("\n")
-        throw new StopInterpretation(sw.toString.toMessage, pos)
-      case ex: InvocationTargetException =>
-        ex.getTargetException match {
-          case ex: scala.quoted.runtime.StopMacroExpansion =>
-            throw ex
-          case ex: dotty.tools.dotc.core.RecursionOverflow =>
-            throw ex
-          case MissingClassValidInCurrentRun(sym, origin) =>
-            suspendOnMissing(sym, origin, pos)
-          case targetException =>
-            val sw = new StringWriter()
-            sw.write("Exception occurred while executing macro expansion.\n")
-            if (!ctx.settings.Ydebug.value) {
-              val end = targetException.getStackTrace.lastIndexWhere { x =>
-                x.getClassName == method.getDeclaringClass.getCanonicalName && x.getMethodName == method.getName
-              }
-              val shortStackTrace = targetException.getStackTrace.take(end + 1)
-              targetException.setStackTrace(shortStackTrace)
-              targetException.printStackTrace(new PrintWriter(sw))
-
-              targetException match
-                case _: CyclicReference => sw.write("\nSee full stack trace using -Ydebug")
-                case _ =>
-            } else {
-              targetException.printStackTrace(new PrintWriter(sw))
-            }
-            sw.write("\n")
-            throw new StopInterpretation(sw.toString.toMessage, pos)
-        }
-    }
-
-  /** List of classes of the parameters of the signature of `sym` */
-  private def paramsSig(sym: Symbol): List[Class[?]] = {
-    def paramClass(param: Type): Class[?] = {
-      def arrayDepth(tpe: Type, depth: Int): (Type, Int) = tpe match {
-        case JavaArrayType(elemType) => arrayDepth(elemType, depth + 1)
-        case _ => (tpe, depth)
-      }
-      def javaArraySig(tpe: Type): String = {
-        val (elemType, depth) = arrayDepth(tpe, 0)
-        val sym = elemType.classSymbol
-        val suffix =
-          if (sym == defn.BooleanClass) "Z"
-          else if (sym == defn.ByteClass) "B"
-          else if (sym == defn.ShortClass) "S"
-          else if (sym == defn.IntClass) "I"
-          else if (sym == defn.LongClass) "J"
-          else if (sym == defn.FloatClass) "F"
-          else if (sym == defn.DoubleClass) "D"
-          else if (sym == defn.CharClass) "C"
-          else "L" + javaSig(elemType) + ";"
-        ("[" * depth) + suffix
-      }
-      def javaSig(tpe: Type): String = tpe match {
-        case tpe: JavaArrayType => javaArraySig(tpe)
-        case _ =>
-          // Take the flatten name of the class and the full package name
-          val pack = tpe.classSymbol.topLevelClass.owner
-          val packageName = if (pack == defn.EmptyPackageClass) "" else s"${pack.fullName}."
-          packageName + tpe.classSymbol.fullNameSeparated(FlatName).toString
-      }
-
-      val sym = param.classSymbol
-      if (sym == defn.BooleanClass) classOf[Boolean]
-      else if (sym == defn.ByteClass) classOf[Byte]
-      else if (sym == defn.CharClass) classOf[Char]
-      else if (sym == defn.ShortClass) classOf[Short]
-      else if (sym == defn.IntClass) classOf[Int]
-      else if (sym == defn.LongClass) classOf[Long]
-      else if (sym == defn.FloatClass) classOf[Float]
-      else if (sym == defn.DoubleClass) classOf[Double]
-      else java.lang.Class.forName(javaSig(param), false, classLoader)
-    }
-    def getExtraParams(tp: Type): List[Type] = tp.widenDealias match {
-      case tp: AppliedType if defn.isContextFunctionType(tp) =>
-        // Call context function type direct method
-        tp.args.init.map(arg => TypeErasure.erasure(arg)) ::: getExtraParams(tp.args.last)
-      case _ => Nil
-    }
-    val extraParams = getExtraParams(sym.info.finalResultType)
-    val allParams = TypeErasure.erasure(sym.info) match {
-      case meth: MethodType => meth.paramInfos ::: extraParams
-      case _ => extraParams
-    }
-    allParams.map(paramClass)
-  }
 end Interpreter
 
 object Interpreter:

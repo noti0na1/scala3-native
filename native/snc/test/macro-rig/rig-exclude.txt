@@ -1,0 +1,3 @@
+# Tests whose macro code the rig cannot link, with the reason. The rig leaves
+# them out; run-macros.py reports them as rig-excluded.
+inline-case-objects	the macro calls java.lang.Class.getCanonicalName, which javalib lacks

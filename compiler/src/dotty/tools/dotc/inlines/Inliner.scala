@@ -1424,7 +1424,7 @@ class Inliner(val call: tpd.Tree)(using Context):
 
     val evaluatedSplice =
       inContext(quoted.MacroExpansion.context(inlinedFrom)):
-        Splicer.splice(body, splicePos, inlinedFrom.srcPos, MacroClassLoader.fromContext)
+        Splicer.splice(body, splicePos, inlinedFrom.srcPos, quoted.MacroExecutor.fromContext)
     val inlinedNormalizer = new TreeMap {
       override def transform(tree: tpd.Tree)(using Context): tpd.Tree = tree match {
         case tree @ Inlined(_, Nil, expr) if tree.inlinedFromOuterScope && enclosingInlineds.isEmpty => transform(expr)

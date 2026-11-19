@@ -9,7 +9,6 @@ import core.Contexts.*
 import core.Decorators.*
 import core.DenotTransformers.DenotTransformer
 import core.Flags.*
-import core.MacroClassLoader
 import core.Symbols.*
 import core.Types.*
 import quoted.*
@@ -18,7 +17,6 @@ import scala.quoted.runtime.impl.{QuotesImpl, SpliceScope}
 import scala.quoted.Quotes
 import scala.util.control.NonFatal
 
-import java.lang.reflect.InvocationTargetException
 
 object MacroAnnotations:
 
@@ -51,7 +49,8 @@ object MacroAnnotations:
       (List(tree), companion)
     else
       debug.println(i"Expanding macro annotations of:\n$tree")
-      val macroInterpreter = new Interpreter(tree.srcPos, MacroClassLoader.fromContext)
+      val executor = MacroExecutor.fromContext
+      val macroInterpreter = new Interpreter(tree.srcPos, executor)
 
       val prefixedTrees = List.newBuilder[MemberDef]
 
@@ -63,7 +62,7 @@ object MacroAnnotations:
             val (tree, companion, suffixed) = lastResult
             debug.println(i"Expanding macro annotation: ${annot}")
             // Interpret call to `new myAnnot(..).transform(using <Quotes>)(<tree>, <companion>)`
-            val (transformedTrees, transformedCompanion) = callMacro(macroInterpreter, tree, companion, annot)
+            val (transformedTrees, transformedCompanion) = callMacro(executor, macroInterpreter, tree, companion, annot)
             // Establish the trees order and check the integrity of the trees
             transformedTrees.span(_.symbol != tree.symbol) match
               case (newPrefixed, newTree :: newSuffixed) =>
@@ -88,27 +87,47 @@ object MacroAnnotations:
   end expandAnnotations
 
   /** Interpret the code `new annot(..).transform(using <Quotes(ctx)>)(<tree>, <companion>)` */
-  private def callMacro(interpreter: Interpreter, tree: MemberDef, companion: Option[MemberDef], annot: Annotation)
+  private def callMacro(executor: MacroExecutor, interpreter: Interpreter, tree: MemberDef, companion: Option[MemberDef], annot: Annotation)
                        (using Context): (List[MemberDef], Option[MemberDef]) =
-    // TODO: Remove when scala.annotation.MacroAnnotation is no longer experimental
-    import scala.reflect.Selectable.reflectiveSelectable
-    type MacroAnnotation = {
-      def transform(using Quotes)(
-        tree: Object/*Erased type of quotes.reflect.Definition*/,
-        companion: Option[Object/*Erased type of quotes.reflect.Definition*/]
-      ): List[MemberDef /*quotes.refelct.Definition known to be MemberDef in QuotesImpl*/]
-    }
+    val result: List[MemberDef /*quotes.reflect.Definition known to be MemberDef in QuotesImpl*/] | Null =
+      try
+        // Interpret macro annotation instantiation `new myAnnot(..)`
+        val annotInstance = interpreter.interpret[Object](annot.tree).get
+        val quotes = QuotesImpl()(using SpliceScope.contextWithNewSpliceScope(tree.symbol.sourcePos)(using MacroExpansion.context(tree)).withOwner(tree.symbol.owner))
+        // `transform` of `scala.annotation.MacroAnnotation`, which the
+        // compiler cannot call directly while the trait is experimental
+        val transform = defn.MacroAnnotationClass.requiredMethod("transform")
+        val transformed =
+          try executor.run(executor.callMethod(annotInstance, transform, List(quotes, tree, companion), annot.tree.srcPos))
+          catch
+            case ex: (Interpreter.StopInterpretation | CompilationUnit.SuspendException) =>
+              throw ex
+            case ex: scala.quoted.runtime.StopMacroExpansion =>
+              if !ctx.reporter.hasErrors then
+                report.error("Macro expansion was aborted by the macro without any errors reported. Macros should issue errors to end-users when aborting a macro expansion with StopMacroExpansion.", annot.tree)
+              null
+            case Interpreter.MissingClassValidInCurrentRun(sym, origin) =>
+              Interpreter.suspendOnMissing(sym, origin, annot.tree)
+            // We're dealing with user-thrown things here, so we must use NonFatal to catch anything realistic,
+            // including `Error`s like `NotImplementedError`
+            case NonFatal(ex) =>
+              val stack0 = ex.getStackTrace.takeWhile(_.getClassName != this.getClass().getName())
+              val stack = stack0.take(1 + stack0.lastIndexWhere(_.getMethodName == "transform"))
+              val msg =
+                em"""Failed to evaluate macro annotation '$annot'.
+                    |  Caused by ${ex.getClass}: ${if (ex.getMessage == null) "" else ex.getMessage}
+                    |    ${stack.mkString("\n    ")}
+                    |"""
+              report.error(msg, annot.tree)
+              null
+        transformed.asInstanceOf[List[MemberDef] | Null]
+      catch
+        case ex: Interpreter.StopInterpretation =>
+          report.error(ex.msg, ex.pos)
+          null
 
-    // Interpret macro annotation instantiation `new myAnnot(..)`
-    // TODO: Make this error handling stronger (no error handling at the moment)
-    val annotInstance = interpreter.interpret[MacroAnnotation](annot.tree).get
-
-    // TODO: Remove when scala.annaotaion.MacroAnnotation is no longer experimental
-    assert(annotInstance.getClass.getClassLoader.loadClass("scala.annotation.MacroAnnotation").isInstance(annotInstance))
-
-    val quotes = QuotesImpl()(using SpliceScope.contextWithNewSpliceScope(tree.symbol.sourcePos)(using MacroExpansion.context(tree)).withOwner(tree.symbol.owner))
-    try
-      val result = annotInstance.transform(using quotes)(tree, companion)
+    if result == null then (List(tree), companion)
+    else
       // Process the result based on if the companion was present or not
       // The idea is that we try to find a transformation of the companion if we do provide one
       companion.map(_.symbol) match
@@ -119,34 +138,6 @@ object MacroAnnotations:
           case (_, result) =>
             report.error(i"Transformed companion for ${tree.symbol} was returned more than once by `(${annot.tree}).transform(..)` during macro expansion", annot.tree)
             (result, companion)
-
-    catch
-      // TODO: Replace this case when scala.annotation.MacroAnnotation is no longer experimental and reflectiveSelectable is not used
-      //       Replace this case with the nested cases.
-      case ex0: InvocationTargetException =>
-        ex0.getCause match
-          case ex: CompilationUnit.SuspendException =>
-            throw ex
-          case ex: scala.quoted.runtime.StopMacroExpansion =>
-            if !ctx.reporter.hasErrors then
-              report.error("Macro expansion was aborted by the macro without any errors reported. Macros should issue errors to end-users when aborting a macro expansion with StopMacroExpansion.", annot.tree)
-            (List(tree), companion)
-          case Interpreter.MissingClassValidInCurrentRun(sym, origin) =>
-            Interpreter.suspendOnMissing(sym, origin, annot.tree)
-          // We're dealing with user-thrown things here, so we must use NonFatal to catch anything realistic,
-          // including `Error`s like `NotImplementedError`
-          case NonFatal(ex) =>
-            val stack0 = ex.getStackTrace.takeWhile(_.getClassName != this.getClass().getName())
-            val stack = stack0.take(1 + stack0.lastIndexWhere(_.getMethodName == "transform"))
-            val msg =
-              em"""Failed to evaluate macro annotation '$annot'.
-                  |  Caused by ${ex.getClass}: ${if (ex.getMessage == null) "" else ex.getMessage}
-                  |    ${stack.mkString("\n    ")}
-                  |"""
-            report.error(msg, annot.tree)
-            (List(tree), companion)
-          case _ =>
-            throw ex0
   end callMacro
 
   /** Check that this tree can be added by the macro annotation */

@@ -1862,6 +1862,10 @@ class QuotesImpl private (using val ctx: Context) extends Quotes, QuoteUnpickler
           else dotc.core.Symbols.defn.UnitType
         else if (clazz.isArray)
           dotc.core.Symbols.defn.ArrayType.appliedTo(typeConstructorOf(clazz.getComponentType))
+        else if !dotty.tools.dotc.config.PlatformHooks.isJvm then
+          // Scala Native's classes have a name only: no canonical name and no
+          // enclosing class
+          typeConstructorOfBinaryName(clazz.getName)
         else if clazz.isMemberClass then
           val name = clazz.getSimpleName.toTypeName
           val enclosing = typeConstructorOf(clazz.getEnclosingClass)
@@ -1869,6 +1873,20 @@ class QuotesImpl private (using val ctx: Context) extends Quotes, QuoteUnpickler
           else enclosing.classSymbol.companionModule.termRef.select(name)
         else
           dotc.core.Symbols.getClassIfDefined(clazz.getCanonicalName).typeRef
+
+      /** The type constructor of the class with binary name `name`: a class
+       *  of that name, or else a member class of the class that its last `$`
+       *  separates, as for `isMemberClass` above.
+       */
+      private def typeConstructorOfBinaryName(name: String): TypeRepr =
+        val cls = dotc.core.Symbols.getClassIfDefined(name)
+        val sep = name.lastIndexOf('$', name.length - 2)
+        if cls.exists || sep <= 0 then cls.typeRef
+        else
+          val simple = name.substring(sep + 1).nn.stripSuffix("$").toTypeName
+          val enclosing = typeConstructorOfBinaryName(name.substring(0, sep).nn)
+          if (enclosing.member(simple).exists) enclosing.select(simple)
+          else enclosing.classSymbol.companionModule.termRef.select(simple)
     end TypeRepr
 
     given TypeReprMethods: TypeReprMethods with

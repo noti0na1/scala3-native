@@ -2,9 +2,6 @@ package dotty.tools.dotc
 package transform
 
 
-import java.io.{PrintWriter, StringWriter}
-import java.lang.reflect.{InvocationTargetException, Method => JLRMethod}
-
 import dotty.tools.dotc.ast.tpd
 import dotty.tools.dotc.core.Contexts.*
 import dotty.tools.dotc.core.Decorators.*
@@ -18,7 +15,7 @@ import dotty.tools.dotc.core.Denotations.staticRef
 import dotty.tools.dotc.core.TypeErasure
 import dotty.tools.dotc.core.Constants.Constant
 
-import dotty.tools.dotc.quoted.Interpreter
+import dotty.tools.dotc.quoted.{Interpreter, MacroExecutor}
 
 import dotty.tools.dotc.util.SrcPos
 
@@ -41,7 +38,7 @@ object Splicer {
    *
    *  See: `Staging`
    */
-  def splice(tree: Tree, splicePos: SrcPos, spliceExpansionPos: SrcPos, classLoader: ClassLoader)(using Context): Tree = tree match {
+  def splice(tree: Tree, splicePos: SrcPos, spliceExpansionPos: SrcPos, executor: MacroExecutor)(using Context): Tree = tree match {
     case Quote(quotedTree, Nil) => quotedTree
     case _ =>
       val owner = ctx.owner
@@ -49,18 +46,14 @@ object Splicer {
       try
         val sliceContext = SpliceScope.contextWithNewSpliceScope(splicePos.sourcePos).withOwner(macroOwner)
         inContext(sliceContext) {
-          val oldContextClassLoader = Thread.currentThread().getContextClassLoader
-          Thread.currentThread().setContextClassLoader(classLoader)
-          try {
-            val interpreter = new SpliceInterpreter(splicePos, classLoader)
+          executor.run {
+            val interpreter = new SpliceInterpreter(splicePos, executor)
 
             // Some parts of the macro are evaluated during the unpickling performed in quotedExprToTree
             val interpretedExpr = interpreter.interpret[Quotes => scala.quoted.Expr[Any]](tree)
             val interpretedTree = interpretedExpr.fold(tree)(macroClosure => PickledQuotes.quotedExprToTree(macroClosure(QuotesImpl())))
 
             checkEscapedVariables(interpretedTree, macroOwner)
-          } finally {
-            Thread.currentThread().setContextClassLoader(oldContextClassLoader)
           }
         }.changeOwner(macroOwner, ctx.owner)
       catch {
@@ -263,7 +256,7 @@ object Splicer {
   /** Tree interpreter that evaluates the tree.
    *  Interpreter is assumed to start at quotation level -1.
    */
-  private class SpliceInterpreter(pos: SrcPos, classLoader: ClassLoader)(using Context) extends Interpreter(pos, classLoader) {
+  private class SpliceInterpreter(pos: SrcPos, executor: MacroExecutor)(using Context) extends Interpreter(pos, executor) {
 
     override protected  def interpretTree(tree: Tree)(implicit env: Env): Object = tree match {
       // Interpret level -1 quoted code `'{...}` (assumed without level 0 splices)

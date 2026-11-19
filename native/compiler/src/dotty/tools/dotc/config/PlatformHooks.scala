@@ -147,6 +147,15 @@ object PlatformHooks:
       case Some(className) => Success(className)
       case None => Failure(new MissingPluginException(path))
 
+  /** The executor of macro code. The native compiler cannot load code, so it
+   *  runs the macro code linked into it, which a main class registers with
+   *  `quoted.MacroRegistry` before compiling. Without any, macro expansion
+   *  is an error.
+   */
+  def macroExecutor(using Context): dotty.tools.dotc.quoted.MacroExecutor = registryExecutor
+
+  private val registryExecutor = new dotty.tools.dotc.quoted.RegistryMacroExecutor
+
   /** The timer `ImportSuggestions` uses to stop slow implicit searches, in
    *  place of `java.util.Timer`. The native compiler is single-threaded, so
    *  no task ever runs: a search for one suggestion is not cut short, but

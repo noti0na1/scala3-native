@@ -55,6 +55,12 @@ object PlatformHooks:
    */
   def jdkClassPath(release: Option[String]): Option[dotty.tools.dotc.classpath.ClassPath] = None
 
+  /** The executor of macro code: it loads the code with the macro class
+   *  loader and calls it by reflection.
+   */
+  def macroExecutor(using dotty.tools.dotc.core.Contexts.Context): dotty.tools.dotc.quoted.MacroExecutor =
+    new dotty.tools.dotc.quoted.ReflectiveMacroExecutor(dotty.tools.dotc.core.MacroClassLoader.fromContext)
+
   /** The timer `ImportSuggestions` uses to stop slow implicit searches. */
   type Timer = java.util.Timer
   type TimerTask = java.util.TimerTask
