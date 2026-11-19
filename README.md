@@ -18,7 +18,14 @@ It needs a companion fork of Scala Native (based on Scala Native's `main`), whic
    With the Scala Native fork's artifacts in another Ivy home `<dir>`, run sbt with `-Dsbt.ivy.home=<dir>`.
 
    `snc` is `native/snc/target/scala-3.10.2-RC1/snc`. `snc-host` is in `native/snc-host/target/scala-3.10.2-RC1/`, with its manifest (`snc-host.snm`) and the class path it was linked from (`snc-host.classpath`), which it needs: next to it, or as `lib/snc.snm` and `lib/snc.classpath` for a `bin/snc`. A symbolic link to `snc-host` finds them next to the file it links to.
-3. To compile with it in sbt or Mill, through the Scala Native fork's plugins, name `snc-host` in `SNC`, or link it as `snc` from a directory on the `PATH`:
+3. To compile with it in sbt or Mill, through the Scala Native fork's plugins, install `snc-host` with coursier, which puts it on the `PATH` as `snc`:
+
+   ```sh
+   native/snc/coursier-channel.sh
+   cs install --channel native/snc-host/target/coursier/channel snc
+   ```
+
+   `coursier-channel.sh` packs `snc-host`, its manifest and copies of the NIR it was linked from into an archive and writes a local coursier channel for it, so the installed `snc` does not depend on this checkout. After linking `snc-host` again, run the script again and `cs update snc`. Without coursier, name `snc-host` in `SNC`, or link it as `snc` from a directory on the `PATH`:
 
    ```sh
    export SNC=$PWD/native/snc-host/target/scala-3.10.2-RC1/snc-host
