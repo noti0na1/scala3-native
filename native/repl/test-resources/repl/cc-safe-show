@@ -1,0 +1,8 @@
+//> using options -language:experimental.captureChecking
+scala> import language.experimental.safe
+scala> val greeting = "native sandbox"
+val greeting: String = "native sandbox"
+scala> val xs: Array[Int] = Array(1, 2, 3)
+val xs: Array[Int]^{any.rd} = Array(1, 2, 3)
+scala> xs.length
+val res0: Int = 3

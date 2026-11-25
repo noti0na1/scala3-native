@@ -24,28 +24,28 @@ object ReplBytecodeAnalysis:
 
     def isScalaRunTimeModule(insn: AbstractInsnNode): Boolean = insn match
       case insn: FieldInsnNode =>
-        insn.getOpcode == GETSTATIC
+        insn.getOpcode() == GETSTATIC
           && insn.owner == "scala/runtime/ScalaRunTime$"
           && insn.name == "MODULE$"
       case _ => false
 
     def isLoadThis(insn: AbstractInsnNode): Boolean = insn match
-      case insn: VarInsnNode => insn.getOpcode == ALOAD && insn.`var` == 0
+      case insn: VarInsnNode => insn.getOpcode() == ALOAD && insn.`var` == 0
       case _ => false
 
     def isScalaRunTimeToString(insn: AbstractInsnNode): Boolean = insn match
       case insn: MethodInsnNode =>
-        (insn.getOpcode == INVOKEVIRTUAL || insn.getOpcode == INVOKESTATIC)
+        (insn.getOpcode() == INVOKEVIRTUAL || insn.getOpcode() == INVOKESTATIC)
           && (insn.owner == "scala/runtime/ScalaRunTime$" || insn.owner == "scala/runtime/ScalaRunTime")
           && insn.name == "_toString"
           && insn.desc == "(Lscala/Product;)Ljava/lang/String;"
       case _ => false
 
     def isReturn(insn: AbstractInsnNode): Boolean =
-      insn.getOpcode == ARETURN
+      insn.getOpcode() == ARETURN
 
     def isSynthesizedToString(method: MethodNode): Boolean =
-      method.instructions.iterator.asScala.filter(_.getOpcode >= 0).toList match
+      method.instructions.iterator.asScala.filter(_.getOpcode() >= 0).toList match
         case List(module, loadThis, call, ret) =>
           isScalaRunTimeModule(module) && isLoadThis(loadThis) && isScalaRunTimeToString(call) && isReturn(ret)
         case List(loadThis, call, ret) =>

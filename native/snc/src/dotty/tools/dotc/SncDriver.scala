@@ -21,6 +21,9 @@ import dotty.tools.dotc.reporting.Reporter
  *    stream (see `SncEvents`), and print text to standard error;
  *  - `--analysis` (with `--events` or `--events-text`): run the sbt phases
  *    and send Zinc's analysis as events too (see `SncAnalysis`).
+ *
+ *  `snc repl [--java-home <dir>] [REPL options] [compiler options]` runs the
+ *  REPL instead (`dotty.tools.repl.NativeRepl`).
  */
 object SncDriver extends NativeDriver:
 
@@ -62,8 +65,11 @@ object SncDriver extends NativeDriver:
 
   override protected def command: CompilerCommand = SncCommand
 
-  /** Compiles as the command line says, and returns the exit code. */
+  /** Compiles as the command line says, or with `repl` first, runs the REPL,
+   *  and returns the exit code.
+   */
   def run(args: Array[String]): Int =
+    if args.headOption.contains("repl") then return repl(args.toList.tail)
     // @argfiles, as scalac expands them
     val expanded = args.toList.flatMap: arg =>
       if arg.startsWith("@") then CommandLineParser.expandArg(arg) else List(arg)
@@ -204,7 +210,6 @@ object SncDriver extends NativeDriver:
    *  none. Without a JDK, `-javabootclasspath` alone is the Java API.
    */
   private def setupJdk()(using Context): Unit =
-    import dotty.tools.dotc.classpath.JdkClassPath
     val release = Option(ctx.settings.javaOutputVersion.value).filter(_.nonEmpty).flatMap(_.toIntOption)
     SncJdk.find(javaHome, sys.env, release) match
       case Left(_) if javaHome.isEmpty && sys.env.get("JAVA_HOME").forall(_.isEmpty) &&
@@ -212,13 +217,43 @@ object SncDriver extends NativeDriver:
         () // the Java API comes from -javabootclasspath alone
       case Left(message) => report.error(message)
       case Right(found) =>
-        JdkClassPath.jdk(found.home).flatMap(JdkClassPath(_, release)) match
-          case Left(message) => report.error(s"$message (${found.from})")
-          case Right(cp) =>
+        useJdk(found, release) match
+          case Left(message) => report.error(message)
+          case Right(()) =>
             if ctx.settings.verbose.value then
               report.echo(s"compiling against the JDK at ${found.home} (${found.from})")
-            PlatformHooks.jdkClassPath = _ => Some(cp)
-            jdkHome = Some(found.home)
+
+  /** Makes the compiler read the Java API of `found` (for `release`, if
+   *  given), or says why it cannot.
+   */
+  private def useJdk(found: SncJdk.Found, release: Option[Int]): Either[String, Unit] =
+    import dotty.tools.dotc.classpath.JdkClassPath
+    JdkClassPath.jdk(found.home).flatMap(JdkClassPath(_, release)) match
+      case Left(message) => Left(s"$message (${found.from})")
+      case Right(cp) =>
+        PlatformHooks.jdkClassPath = _ => Some(cp)
+        jdkHome = Some(found.home)
+        Right(())
+
+  /** `snc repl`: the REPL, whose compiler reads the Java API of the JDK that
+   *  `--java-home` names or that `SncJdk` finds, as compiles do. With
+   *  `-javabootclasspath` among the arguments, no JDK is needed.
+   */
+  private def repl(args: List[String]): Int =
+    javaHomeOption(args) match
+      case Left(message) =>
+        System.err.println(s"snc repl: $message")
+        Exit.Usage
+      case Right((home, rest)) =>
+        javaHome = home
+        val jdk = SncJdk.find(javaHome, sys.env, release = None).flatMap(useJdk(_, release = None))
+        jdk match
+          case Left(message) if !rest.exists(_.startsWith("-javabootclasspath")) =>
+            System.err.println(s"snc repl: $message")
+            Exit.Usage
+          case _ =>
+            dotty.tools.repl.NativeRepl.main(rest.toArray, SncExecutable.executableDir(),
+              dotty.tools.repl.NativeRepl.Versions(SncBuildInfo.scalaVersion, SncBuildInfo.scalaNativeVersion))
 
   /** Warns about a Scala library on the class path whose version is not the
    *  one snc is built from: the compiler expects its own library, and the

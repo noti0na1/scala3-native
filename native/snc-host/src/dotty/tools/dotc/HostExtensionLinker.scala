@@ -49,6 +49,8 @@ final class HostExtensionLinker(val host: ToolsLinker.Host) extends ExtensionLin
     val response = linker.link(args)
     Response(response.artifact, response.log)
 
+  override def prepare(args: Seq[String]): Iterator[String] = linker.prepare(args)
+
   def load(bundle: Path): Loaded = load(bundle, global = false)
 
   /** Loads a bundle as `load` does; with `global`, extensions loaded after it

@@ -9,6 +9,8 @@ val `scala3-compiler-nonbootstrapped` = Build.`scala3-compiler-nonbootstrapped`
 val `scala3-compiler-bootstrapped` = Build.`scala3-compiler-bootstrapped`
 val `scala3-interfaces-native` = NativeBuild.`scala3-interfaces-native`
 val `scala3-compiler-native` = NativeBuild.`scala3-compiler-native`
+val `scala3-repl-native` = NativeBuild.`scala3-repl-native`
+val `scala3-repl-runtime-native` = NativeBuild.`scala3-repl-runtime-native`
 val snc = NativeBuild.snc
 val sncHost = NativeBuild.sncHost
 

@@ -1,0 +1,14 @@
+scala> import scala.reflect.Selectable.reflectiveSelectable; (new { def f = 41 }: { def f: Int }).f
+Linking the line failed:
+Found usage of 1 unsupported features!
+Detected usage of unsupported feature StructuralCalls - Structural calls (reflectiveSelectable) are not supported in extensions: the program's table of reflective proxies is the host's
+Feature referenced from:
+    constructor rs$line$1$() at unknown:1
+  static method rs$line$1.$show(int, int, bool, int[]): java.lang.String[] at unknown:1
+Unreachable symbols found after classloading run. It can happen when using dependencies not cross-compiled for Scala Native or not yet ported JDK definitions.
+scala> 1 + 1
+val res1: Int = 2
+scala> class C { def f = 3 }
+// defined class C
+scala> new C().f
+val res2: Int = 3

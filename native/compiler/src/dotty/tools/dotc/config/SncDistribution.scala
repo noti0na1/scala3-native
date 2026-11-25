@@ -1,5 +1,6 @@
 package dotty.tools.dotc.config
 
+import java.io.File
 import java.nio.file.{Files, Path}
 import java.util.Properties
 
@@ -11,14 +12,20 @@ import scala.util.Try
  *  `lib/snc-distribution.properties`:
  *
  *  - `version`: the distribution's version;
- *  - `repository`: the Maven repository, relative to the file.
+ *  - `repository`: the Maven repository, relative to the file;
+ *  - `repl.classpath`: the class path of `snc repl` when none is given,
+ *    entries relative to the file and separated by `:`;
+ *  - `repl.evaluator-host`: an evaluator host linked for that class path,
+ *    with its manifest next to it, relative to the file (optional).
  *
  *  An `snc` without the file (one built in place) has no distribution.
  */
 final case class SncDistribution(
   file: Path,
   version: String,
-  repository: Option[Path]):
+  repository: Option[Path],
+  replClasspath: List[Path],
+  evaluatorHost: Option[Path]):
 
   /** The repository as a URI, as resolvers take it. */
   def repositoryUri: Option[String] = repository.map(_.toUri.toString)
@@ -46,6 +53,11 @@ object SncDistribution:
       SncDistribution(
         file = file,
         version = value("version").getOrElse("unknown"),
-        repository = value("repository").map(resolve).filter(Files.isDirectory(_)))
+        repository = value("repository").map(resolve).filter(Files.isDirectory(_)),
+        replClasspath = value("repl.classpath").toList
+          .flatMap(_.split(File.pathSeparatorChar).toList)
+          .filter(_.nonEmpty)
+          .map(resolve),
+        evaluatorHost = value("repl.evaluator-host").map(resolve).filter(Files.isRegularFile(_)))
     }.toOption
 end SncDistribution

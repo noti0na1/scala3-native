@@ -48,7 +48,6 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.compiletime.uninitialized
 import scala.jdk.CollectionConverters.*
-import org.objectweb.asm.ClassReader
 import scala.util.Using
 import scala.util.control.NonFatal
 
@@ -74,6 +73,7 @@ import scala.util.control.NonFatal
  *  @param context     the latest compiler context
  *  @param pastInputs  the replayable inputs of the session, most recent first
  *  @param repositories the repositories added to dependency resolution, in the order they were added
+ *  @param firstObjectIndex the index of the session's first wrapper
  */
 case class State(objectIndex: Int,
                  valIndex: Int,
@@ -82,8 +82,9 @@ case class State(objectIndex: Int,
                  quiet: Boolean,
                  context: Context,
                  pastInputs: List[String] = Nil,
-                 repositories: List[coursierapi.Repository] = Nil):
-  def validObjectIndexes = (1 to objectIndex).filterNot(invalidObjectIndexes.contains(_))
+                 repositories: List[DependencyResolver.Repository] = Nil,
+                 firstObjectIndex: Int = 1):
+  def validObjectIndexes = (firstObjectIndex to objectIndex).filterNot(invalidObjectIndexes.contains(_))
 
   def recordInput(input: String): State = copy(pastInputs = input :: pastInputs)
 
@@ -149,12 +150,16 @@ class ReplDriver(settings: Array[String],
 
   /** the initial, empty state of the REPL session */
   final def initialState: State =
-    val emptyState = State(0, 0, Map.empty, Set.empty, false, rootCtx)
+    val first = firstObjectIndex
+    val emptyState = State(first - 1, 0, Map.empty, Set.empty, false, rootCtx, firstObjectIndex = first)
     val initScript = rootCtx.settings.replInitScript.value(using rootCtx)
     val combinedScript = initScript.trim() match
       case "" => extraPredef
       case script => s"$extraPredef\n$script"
     run(combinedScript)(using emptyState).copy(pastInputs = Nil)
+
+  /** The index of a new session's first wrapper, `rs$line$<index>` */
+  protected def firstObjectIndex: Int = 1
 
   /** Reset state of repl to the initial state
    *
@@ -163,22 +168,35 @@ class ReplDriver(settings: Array[String],
    *  everything properly
    */
   protected def resetToInitial(settings: List[String] = Nil): Unit = {
+    if backend != null then backend.nn.close()
     rootCtx = initialCtx(settings)
+    rendering = new Rendering(classLoader)
+    val newSessionBackend = newBackend()
+    backend = newSessionBackend
     if (rootCtx.settings.outputDir.isDefault(using rootCtx))
       rootCtx = rootCtx.fresh
-        .setSetting(rootCtx.settings.outputDir, io.virtualDirectory("<REPL compilation output>"))
-    compiler = new ReplCompiler
-    rendering = new Rendering(classLoader)
+        .setSetting(rootCtx.settings.outputDir, newSessionBackend.defaultOutputDir())
+    compiler = newSessionBackend.newCompiler()
   }
+
+  /** The backend of a new session (see `ReplBackend`). `resetToInitial`
+   *  creates `rendering` before it calls this method, so the backend may
+   *  use it.
+   */
+  protected def newBackend(): ReplBackend = new JvmReplBackend(rendering)
 
   private var rootCtx: Context = uninitialized
   private var shouldStart: Boolean = uninitialized
   private var compiler: ReplCompiler = uninitialized
   protected var rendering: Rendering = uninitialized
+  private var backend: ReplBackend | Null = null
 
   // initialize the REPL session as part of the constructor so that once `run`
   // is called, we're in business
   resetToInitial()
+
+  /** The current session's backend. */
+  protected final def sessionBackend: ReplBackend = backend.nn
 
   override protected def command: CompilerCommand = ReplCommand
 
@@ -257,15 +275,16 @@ class ReplDriver(settings: Array[String],
         var firstCtrlCEntered = false
         val thread = Thread.currentThread()
 
-        // Clear the stop flag before executing new code
-        ReplBytecodeInstrumentation.setStopFlag(rendering.classLoader()(using state.context), false)
+        // Clear the stop request before executing new code
+        sessionBackend.setInterrupted(false)(using state.context)
 
         val newState = terminal.withMonitoringCtrlC(
           handler = () =>
             if (!firstCtrlCEntered) {
               firstCtrlCEntered = true
-              // Set the stop flag to trigger throwIfReplStopped() in instrumented code
-              ReplBytecodeInstrumentation.setStopFlag(rendering.classLoader()(using state.context), true)
+              // Ask the running line to stop; on the JVM, this sets the flag that
+              // throwIfReplStopped() checks in instrumented code
+              sessionBackend.setInterrupted(true)(using state.context)
               // Also interrupt the thread as a fallback for non-instrumented code, e.g. IO/sleeps
               thread.interrupt()
               out.println("\nAttempting to interrupt running REPL command")
@@ -298,9 +317,9 @@ class ReplDriver(settings: Array[String],
   }
 
   protected final def interpretSubmission(res: ParseResult)(using state: State): State =
-    rendering.classLoader()(using state.context).asContext(interpret(res))
+    sessionBackend.withRunContext(interpret(res))(using state.context)
 
-  protected def runBody(body: => State): State = rendering.classLoader()(using rootCtx).asContext(withRedirectedOutput(body))
+  protected def runBody(body: => State): State = sessionBackend.withRunContext(withRedirectedOutput(body))(using rootCtx)
 
   // TODO: i5069
   final def bind(name: String, value: Any)(using state: State): State = state
@@ -481,8 +500,9 @@ class ReplDriver(settings: Array[String],
       case CommandThenCode(cmd, code) =>
         val stateAfterCommand = interpretCommand(cmd)
         val recorded = cmd.replayLine.fold(stateAfterCommand)(line => stateAfterCommand.recordInput(line.strip))
-        rendering.classLoader()(using recorded.context).asContext:
+        sessionBackend.withRunContext(
           interpret(ParseResult(code)(using recorded))(using recorded)
+        )(using recorded.context)
 
       case MixedCommandsAndDirectives =>
         out.println(
@@ -596,19 +616,29 @@ class ReplDriver(settings: Array[String],
       val typeAliases =
         info.bounds.hi.typeMembers.filter(_.symbol.info.isTypeAlias)
 
-      // The wrapper object may fail to initialize if the rhs of a ValDef throws.
-      // In that case, don't attempt to render any subsequent vals, and mark this
-      // wrapper object index as invalid.
+      // Running the line initializes the wrapper object and renders its
+      // values. The wrapper object may fail to initialize if the rhs of a
+      // ValDef throws. In that case, don't attempt to render any subsequent
+      // vals, and mark this wrapper object index as invalid.
+      def runLine(values: List[ReplValue]): ReplResult =
+        val earlier = state.validObjectIndexes.filter(_ != state.objectIndex).toList
+        sessionBackend.run(ReplLine(state.objectIndex, symbol, values, earlier))
+      val shownVals = vals.filterNot(_.symbol.is(Lazy))
+      val result =
+        if shownVals.isEmpty then ReplResult.Values(Nil)
+        else runLine(shownVals.map(d => ReplValue(d.symbol, rendering.prefixLength(d))).toList)
       var failedInit = false
       val renderedVals =
         val buf = mutable.ListBuffer[Diagnostic]()
-        for d <- vals do if !failedInit then rendering.renderVal(d) match
-          case Right(Some(v)) =>
-            buf += v
-          case Left(e) =>
-            buf += rendering.renderError(e, d)
+        val texts = result match
+          case ReplResult.Values(texts) => texts.iterator
+          case _ => Iterator.empty
+        for d <- vals do if !failedInit then result match
+          case ReplResult.Failed(error) if !d.symbol.is(Lazy) =>
+            buf += rendering.info(error, d)
             failedInit = true
           case _ =>
+            buf ++= rendering.renderVal(d, _ => if d.symbol.is(Lazy) then None else texts.next())
         buf.toList
 
       if failedInit then
@@ -621,7 +651,14 @@ class ReplDriver(settings: Array[String],
           typeAliases.map(rendering.renderTypeAlias)
           ++ defs.map(rendering.renderMethod)
           ++ renderedVals
-        val diagnostics = if formattedMembers.isEmpty then rendering.forceModule(symbol) else formattedMembers
+        // Without members to show, run the line to initialize the wrapper,
+        // unless it ran already to render values (all of type Unit)
+        val diagnostics =
+          if formattedMembers.nonEmpty then formattedMembers
+          else if shownVals.nonEmpty then Nil
+          else runLine(Nil) match
+            case ReplResult.Failed(error) => List(rendering.info(error, symbol.denot))
+            case _ => Nil
         val reclaimed = vals.toList.reverse
           .filter(_.symbol.name.show.startsWith(str.REPL_RES_PREFIX))
           .takeWhile(resAndUnit)
@@ -759,28 +796,8 @@ class ReplDriver(settings: Array[String],
         out.println(s"""Cannot add "$path" to classpath.""")
         state
       else
-        def flatten(f: AbstractFile): Iterator[AbstractFile] =
-          if (f.isDirectory || f.ext.isJarOrZip) f.iterator.flatMap(flatten)
-          else Iterator(f)
-
-        def tryClassLoad(classFile: AbstractFile): Option[String] = {
-          val input = classFile.input
-          try {
-            val reader = new ClassReader(input)
-            val clsName = reader.getClassName.replace('/', '.')
-            rendering.myClassLoader.loadClass(clsName)
-            Some(clsName)
-          } catch
-            case _: ClassNotFoundException => None
-          finally {
-            input.close()
-          }
-        }
-
         try {
-          val entries = flatten(jarFile)
-
-          val existingClass = entries.filter(_.ext.isClass).find(tryClassLoad(_).isDefined)
+          val existingClass = sessionBackend.existingClassIn(jarFile)(using state.context)
           if (existingClass.nonEmpty)
             out.println(s"The path '$path' cannot be loaded, it contains a classfile that already exists on the classpath: ${existingClass.get}")
           else inContext(state.context):
@@ -790,7 +807,7 @@ class ReplDriver(settings: Array[String],
             ctx.platform.addToClassPath(jarClassPath)
             SymbolLoaders.mergeNewEntries(defn.RootClass, ClassPath.RootPackage, jarClassPath, ctx.platform.classPath)
 
-            rendering.addToClasspath(jarClassPath.searchLocations)
+            sessionBackend.addToClasspath(List(jarFile.jpath.nn))
 
             out.println(s"Added '$path' to classpath.")
         } catch {
@@ -918,7 +935,7 @@ class ReplDriver(settings: Array[String],
       else
         val root = if Files.isDirectory(resource) then resource else stageResourceFile(resource)
         inContext(state.context):
-          rendering.addResource(root.toPlainFile)
+          sessionBackend.addToClasspath(List(root))
         out.println(s"Added '$path' to classpath.")
     catch case NonFatal(e) =>
       out.println(s"Failed to load '$path' to classpath: ${e.getMessage}")
@@ -953,7 +970,7 @@ class ReplDriver(settings: Array[String],
               val classpathState = newRun(state)
               inContext(classpathState.context):
                 DependencyResolver.addToCompilerClasspath(files)
-                rendering.addToClasspath(files.map(f => f.toPath.toPlainFile))
+                sessionBackend.addToClasspath(files.map(_.toPath))
                 val depsDescription = if deps.size == 1 then "a dependency" else s"${deps.size} dependencies"
                 out.println(s"Resolved $depsDescription (${files.size} JARs)")
               classpathState

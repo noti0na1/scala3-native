@@ -9,7 +9,8 @@ import java.nio.file.Path
  *  A compiler that can do it is linked as a live-execution host: its manifest
  *  (`<executable>.snm`) says which classes and traits extensions may subclass
  *  and call (native/snc/host/boundary.txt). The macro executor
- *  (`MacroExtensions` in snc-host) links macro code with it. The host's main
+ *  (`MacroExtensions` in snc-host) links macro code with it, and the REPL
+ *  sends it the link requests of its lines (`request`). The host's main
  *  (`SncHostMain`) installs an implementation; a compiler that is not a host,
  *  such as the plain `snc`, has none.
  *
@@ -38,10 +39,20 @@ trait ExtensionLinker:
 
   /** Links as `snlink` with the arguments of an extension link would
    *  (`--extension --host <manifest> --ext <entry> ... <class path>`), in this
-   *  process, against any host: the bundle, or none, and the link's log,
-   *  timings included.
+   *  process, against any host, such as the REPL's evaluator: the bundle, or
+   *  none, and the link's log, timings included. The REPL's
+   *  `EvaluatorBackend` links its lines with it.
    */
   def request(args: Seq[String]): ExtensionLinker.Response
+
+  /** Reads what a link request needs before it is made, one step per element
+   *  (the manifests, each jar of the class path, a link of the request), so
+   *  that a single-threaded caller can take the steps while it waits for its
+   *  user. A step reads one input, so all but the last are short next to a
+   *  link; how short depends on the input's size and the machine. Each
+   *  element names its step.
+   */
+  def prepare(args: Seq[String]): Iterator[String] = Iterator.empty
 
 end ExtensionLinker
 

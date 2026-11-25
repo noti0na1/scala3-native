@@ -1,0 +1,8 @@
+scala> val _ = println("hi")
+hi
+scala> val (_, _) = { println("pair"); (1, 2) }
+pair
+scala> val _ @ _ = { println("bound"); 3 }
+bound
+scala> 1 + 1
+val res0: Int = 2

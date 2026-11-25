@@ -130,13 +130,88 @@ object NativeBuild {
         nativeConfig ~= nativeCompilerConfig
       )
 
+  /** The REPL of `snc` (`snc repl`, see README.md, "REPL"): the REPL's
+   *  sources, where a file under native/repl/src replaces the one under
+   *  repl/src at the same path, and the native REPL in native/repl/src. The
+   *  JVM REPL's own code (JLine, its class loaders and bytecode
+   *  instrumentation, coursier's Java API) is compiled against its libraries
+   *  but must stay unreachable from `snc`'s main.
+   */
+  lazy val `scala3-repl-native` =
+    Project("scala3-repl-native", file("native/repl"))
+      .enablePlugins(ScalaNativePlugin)
+      .dependsOn(`scala3-compiler-native`)
+      .settings(
+        scalaVersion := Versions.referenceVersion,
+        scalacOptions ~= (_.filterNot(_ == "-Werror")),
+        Compile / unmanagedSourceDirectories := {
+          val root = (ThisBuild / baseDirectory).value
+          Seq(
+            root / "repl" / "src",
+            root / "directives-parser" / "src" / "main" / "scala",
+            baseDirectory.value / "src"
+          )
+        },
+        Compile / unmanagedSources := withOverlay(
+          (Compile / unmanagedSources).value,
+          (ThisBuild / baseDirectory).value / "repl" / "src",
+          baseDirectory.value / "src"),
+        libraryDependencies ++= Seq(
+          Dependencies.jlineReader,
+          Dependencies.jlineTerminal,
+          Dependencies.coursierInterface
+        )
+      )
+
+  /** The library that REPL lines run with: `snc repl` compiles lines against
+   *  its TASTy and links them with its NIR. It holds the pretty-printer and
+   *  the runtime of repl/src (`$show`'s renderer, stack traces), and in
+   *  native/repl-runtime/src the evaluator, the main of the evaluator host
+   *  that `snc repl` links from this jar and the class path, and the relink
+   *  backend's main. `snc`'s build copies its jar next to `snc` as
+   *  `repl-runtime.jar`.
+   */
+  lazy val `scala3-repl-runtime-native` =
+    Project("scala3-repl-runtime-native", file("native/repl-runtime"))
+      .enablePlugins(ScalaNativePlugin)
+      .settings(
+        scalaVersion := Versions.referenceVersion,
+        scalacOptions ~= (_.filterNot(o => o == "-Werror" || o == "-Yexplicit-nulls")),
+        Compile / unmanagedSourceDirectories := {
+          val repl = (ThisBuild / baseDirectory).value / "repl" / "src"
+          Seq(
+            repl / "pprint",
+            repl / "fansi",
+            repl / "sourcecode",
+            repl / "dotty" / "tools" / "repl" / "runtime",
+            baseDirectory.value / "src"
+          )
+        },
+        exportJars := true
+      )
+
+  /** Replaces, among `sources`, each file under `base` by the file under
+   *  `overlay` at the same path, if there is one; a Scala file can replace a
+   *  Java one.
+   */
+  private def withOverlay(sources: Seq[File], base: File, overlay: File): Seq[File] = {
+    def withoutExtension(path: String) = path.replaceAll("\\.(scala|java)$", "")
+    val replaced = (overlay ** ("*.scala" || "*.java")).get
+      .flatMap(IO.relativize(overlay, _))
+      .map(withoutExtension)
+      .toSet
+    sources.filterNot { file =>
+      IO.relativize(base, file).exists(p => replaced(withoutExtension(p)))
+    }
+  }
+
   /** `snc`: the native compiler with the Scala Native compiler plugin built in.
    *  `-Xplugin` paths to the plugin's jar select it, as on the JVM.
    */
   lazy val snc =
     Project("snc", file("native/snc"))
       .enablePlugins(ScalaNativePlugin)
-      .dependsOn(`scala3-compiler-native`)
+      .dependsOn(`scala3-compiler-native`, `scala3-repl-native`)
       .settings(
         scalaVersion := Versions.referenceVersion,
         // As in scala-native, where nscplugin is written without explicit nulls
@@ -193,7 +268,14 @@ object NativeBuild {
           Seq(file)
         }.taskValue,
         Compile / mainClass := Some("dotty.tools.dotc.SncMain"),
-        nativeConfig ~= nativeCompilerConfig
+        nativeConfig ~= nativeCompilerConfig,
+        // snc finds repl-runtime.jar next to itself
+        Compile / nativeLink := {
+          val binary = (Compile / nativeLink).value
+          IO.copyFile((`scala3-repl-runtime-native` / Compile / packageBin).value,
+            binary.getParentFile / "repl-runtime.jar")
+          binary
+        }
       )
 
   /** `snc` linked as a live-execution host (README.md):
@@ -229,6 +311,7 @@ object NativeBuild {
         Compile / nativeLink := {
           val binary = (Compile / nativeLink).value
           val dir = binary.getParentFile
+          IO.copyFile((`scala3-repl-runtime-native` / Compile / packageBin).value, dir / "repl-runtime.jar")
           // The NIR the extension linker reads the host's classes from
           IO.writeLines(dir / (binary.getName + ".classpath"),
             (Compile / fullClasspath).value.files.map(_.getAbsolutePath).filterNot(_.endsWith("-sources.jar")))

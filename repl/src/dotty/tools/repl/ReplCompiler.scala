@@ -32,10 +32,11 @@ import scala.collection.mutable
  *  - compiles parsed expression in the current REPL state:
  *    - adds the appropriate imports in scope
  *    - wraps expressions into a dummy object
+ *    - with `generateShow`, gives that object a `$show` method (`ReplShow`)
  *  - provides utility to query the type of an expression
  *  - provides utility to query the documentation of an expression
  */
-class ReplCompiler extends Compiler:
+class ReplCompiler(generateShow: Boolean = false) extends Compiler:
 
   override protected def frontendPhases: List[List[Phase]] = List(
     List(Parser()),
@@ -44,6 +45,7 @@ class ReplCompiler extends Compiler:
     List(WInferUnion(), CheckUnused.PostTyper(), CheckShadowing()),
     List(CollectTopLevelImports()),
     List(PostTyper()),
+  ) ::: (if generateShow then List(List(ReplShow.GenShow())) else Nil) ::: List(
     List(UnrollDefinitions()),
   )
 

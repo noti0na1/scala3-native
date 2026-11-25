@@ -9,6 +9,9 @@ import coursierapi.{Dependency, IvyRepository, MavenRepository, Repository}
 /** Handles dependency resolution using Coursier for the REPL */
 object DependencyResolver:
 
+  /** A repository to resolve from (`State.repositories`). */
+  type Repository = coursierapi.Repository
+
   private val defaultRepositories: List[Repository] = List(
     MavenRepository.of("https://repo1.maven.org/maven2"),
   )

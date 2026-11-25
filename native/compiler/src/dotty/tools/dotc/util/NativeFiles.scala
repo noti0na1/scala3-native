@@ -8,7 +8,7 @@ import scala.collection.mutable
 import scala.jdk.CollectionConverters.*
 import scala.util.control.NonFatal
 
-/** Files and caches of the native compiler's tools (`snc`,
+/** Files and caches of the native compiler's tools (`snc`, `snc repl`,
  *  `snc-host`): deleting trees, the content hashes and keys of cache entries,
  *  and putting entries in place in a cache that concurrent processes share.
  *
@@ -52,16 +52,21 @@ object NativeFiles:
       .map(Paths.get(_).resolve("clang")).find(Files.isExecutable(_)).fold("")(_.toString)
 
   /** The `.nir` files of a jar or directory, as relative paths with `/`. */
-  def nirFiles(root: Path): Set[String] =
+  def nirFiles(root: Path): Set[String] = filesOf(root, ".nir")
+
+  /** The files of a jar or directory whose names end with `suffix`, as
+   *  relative paths with `/`.
+   */
+  def filesOf(root: Path, suffix: String): Set[String] =
     if Files.isDirectory(root) then
       val stream = Files.walk(root)
       try
-        stream.iterator.asScala.filter(p => p.toString.endsWith(".nir") && Files.isRegularFile(p))
+        stream.iterator.asScala.filter(p => p.toString.endsWith(suffix) && Files.isRegularFile(p))
           .map(p => root.relativize(p).toString.replace(File.separatorChar, '/')).toSet
       finally stream.close()
     else
       val zip = new java.util.zip.ZipFile(root.toFile)
-      try zip.entries.asScala.map(_.getName).filter(_.endsWith(".nir")).toSet
+      try zip.entries.asScala.map(_.getName).filter(_.endsWith(suffix)).toSet
       finally zip.close()
 
   /** The content hash of a directory's NIR files: their relative paths and

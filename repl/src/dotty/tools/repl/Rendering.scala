@@ -277,7 +277,7 @@ private[repl] class Rendering(parentClassLoader: Option[ClassLoader] = None):
    *
    *  Calling this method evaluates the expression using reflection
    */
-  private def valueOf(sym: Symbol, prefixLength: Int)(using Context): Option[fansi.Str] =
+  private[repl] def valueOf(sym: Symbol, prefixLength: Int)(using Context): Option[fansi.Str] =
     val objectName = sym.owner.fullName.encode.toString.stripSuffix("$")
     val resObj: Class[?] = Class.forName(objectName, true, classLoader())
     val symValue = resObj
@@ -319,39 +319,54 @@ private[repl] class Rendering(parentClassLoader: Option[ClassLoader] = None):
   def renderMethod(d: Denotation)(using Context): Diagnostic =
     infoDiagnostic(d.symbol.showUser, d)
 
-  /** Render value definition result */
-  def renderVal(d: Denotation)(using Context): Either[ReflectiveOperationException, Option[Diagnostic]] =
+  /** Render value definition result. `value` renders the value, given the
+   *  width of the declaration before it, or gives `None` for a value that is
+   *  not shown.
+   */
+  def renderVal(d: Denotation, value: Int => Option[fansi.Str])(using Context): Option[Diagnostic] =
     val dcl = fansi.Str(SyntaxHighlighting.highlight(d.symbol.showUser))
     def msg(s: fansi.Str) = infoDiagnostic(s, d)
-    try
-      Right(
-        if d.symbol.is(Flags.Lazy) then Some(msg(dcl))
-        else {
-          val prefix = dcl ++ " = "
-          // Prefix can have multiple lines, only consider the last one
-          // when determining the initial column offset for pretty-printing
-          val prefixLength = prefix.plainText.linesIterator.toSeq.lastOption.getOrElse("").length
-          valueOf(d.symbol, prefixLength).map(value => msg(prefix ++ value))
-        }
-      )
-    catch case e: ReflectiveOperationException => Left(e)
+    if d.symbol.is(Flags.Lazy) then Some(msg(dcl))
+    else {
+      val prefix = dcl ++ " = "
+      value(prefixLength(prefix)).map(value => msg(prefix ++ value))
+    }
   end renderVal
 
-  /** Force module initialization in the absence of members. */
+  /** The width of the declaration before a shown value (`val x: Int = `):
+   *  the length of its last line.
+   */
+  def prefixLength(d: Denotation)(using Context): Int =
+    prefixLength(fansi.Str(SyntaxHighlighting.highlight(d.symbol.showUser)) ++ " = ")
+
+  // Prefix can have multiple lines, only consider the last one
+  // when determining the initial column offset for pretty-printing
+  private def prefixLength(prefix: fansi.Str): Int =
+    prefix.plainText.linesIterator.toSeq.lastOption.getOrElse("").length
+
+  /** Force module initialization in the absence of members. Returns the
+   *  rendered exception if the initialization fails.
+   */
   // the module statements are executing in can fail to initialize if there's a problem
   @nowarn("msg=Catching ExceptionInInitializerError can lead to unexpected behavior")
-  def forceModule(sym: Symbol)(using Context): Seq[Diagnostic] =
+  def forceModule(sym: Symbol)(using Context): Option[fansi.Str] =
     def load() =
       val objectName = sym.fullName.encode.toString
       Class.forName(objectName, true, classLoader())
-      Nil
+      None
     try load()
     catch
-      case e: ExceptionInInitializerError => List(renderError(e, sym.denot))
-      case NonFatal(e) => List(renderError(e, sym.denot))
+      case e: ExceptionInInitializerError => Some(errorText(e))
+      case NonFatal(e) => Some(errorText(e))
 
   /** Render the stack trace of the underlying exception. */
   def renderError(thr: Throwable, d: Denotation)(using Context): Diagnostic =
+    infoDiagnostic(errorText(thr), d)
+
+  /** The stack trace of the underlying exception, without the frames of the
+   *  wrapper's initialization and those below it.
+   */
+  def errorText(thr: Throwable)(using Context): fansi.Str =
     val cause = rootCause(thr)
     // detect
     //at repl$.rs$line$2$.<clinit>(rs$line$2:1)
@@ -361,9 +376,13 @@ private[repl] class Rendering(parentClassLoader: Option[ClassLoader] = None):
       && (ste.getMethodName == nme.STATIC_CONSTRUCTOR.show || ste.getMethodName == nme.CONSTRUCTOR.show)
 
     val formatted0 = cause.formatStackTracePrefix(!isWrapperInitialization(_))
-    val formatted: fansi.Str = if (ctx.settings.color.value == "never") formatted0.plainText else formatted0
-    infoDiagnostic(formatted, d)
-  end renderError
+    if (ctx.settings.color.value == "never") formatted0.plainText else formatted0
+  end errorText
+
+  /** `msg` as an informational diagnostic at the position of `d`, the form
+   *  in which definitions are shown.
+   */
+  def info(msg: fansi.Str, d: Denotation)(using Context): Diagnostic = infoDiagnostic(msg, d)
 
   private def infoDiagnostic(msg: fansi.Str, d: Denotation)(using Context): Diagnostic = {
     new Diagnostic.Info(msg.render, d.symbol.sourcePos)

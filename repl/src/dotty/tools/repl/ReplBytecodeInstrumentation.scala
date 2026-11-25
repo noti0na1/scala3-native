@@ -16,7 +16,7 @@ object ReplBytecodeInstrumentation:
       val cw = new ClassWriter(cr, ClassWriter.COMPUTE_MAXS | ClassWriter.COMPUTE_FRAMES)
       val instrumenter = new InstrumentClassVisitor(cw)
       cr.accept(instrumenter, ClassReader.EXPAND_FRAMES)
-      cw.toByteArray
+      cw.toByteArray()
     catch
       case ex: Exception => originalBytes
 
