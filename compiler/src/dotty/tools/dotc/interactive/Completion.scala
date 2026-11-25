@@ -49,7 +49,18 @@ case class Completion(label: String, description: String, symbols: List[Symbol])
 
 object Completion:
 
-  private val logger = Logger.getLogger(this.getClass.getName)
+  private lazy val logger = Logger.getLogger(this.getClass.getName)
+
+  /** Logs through `java.util.logging` on the JVM. Scala Native has no
+   *  `java.util.logging`: there a warning goes to standard error, and finer
+   *  levels are left out, as the JVM's default configuration leaves them out.
+   */
+  private def logWarning(message: String): Unit =
+    if dotty.tools.dotc.config.PlatformHooks.isJvm then logger.warning(message)
+    else System.err.println(s"WARNING: $message")
+
+  private def logFine(message: String): Unit =
+    if dotty.tools.dotc.config.PlatformHooks.isJvm then logger.fine(message)
 
   def scopeContext(pos: SourcePosition, tpdPath: List[tpd.Tree], completionContext: Context)(using Context): CompletionResult =
     inContext(completionContext):
@@ -632,7 +643,7 @@ object Completion:
               termRef.denot.asSingleDenotation.mapInfo(_ => tpe)
             }
         catch case ex: Exception =>
-          logger.warning(
+          logWarning(
             s"Exception when trying to apply extension method:\n ${ex.getMessage()}\n${ex.getStackTrace().mkString("\n")}"
           )
           None
@@ -740,7 +751,7 @@ object Completion:
       interactiv.println(i"implicit conversion targets considered: ${conversions.toList}%, %")
       conversions
     } catch case ex: Exception =>
-      logger.fine(
+      logFine(
         s"Exception when searching for implicit conversions:\n ${ex.getMessage()}\n${ex.getStackTrace().mkString("\n")}"
       )
       Set.empty
