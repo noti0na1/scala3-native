@@ -58,7 +58,7 @@ jobs:
           check-latest: true
           java-version: 17
           cache: 'sbt'
-      - uses: sbt/setup-sbt@67d461eba2c4753196c230e02da850757ba4775e # v1.5.14
+      - uses: sbt/setup-sbt@7e114eae4f32ec3f93c851c2793376a77f384409 # v1.5.15
       - name: Compile with coverage and Ycheck
         run: |
           ./project/scripts/sbt '
@@ -81,7 +81,7 @@ jobs:
           check-latest: true
           java-version: 17
           cache: 'sbt'
-      - uses: sbt/setup-sbt@67d461eba2c4753196c230e02da850757ba4775e # v1.5.14
+      - uses: sbt/setup-sbt@7e114eae4f32ec3f93c851c2793376a77f384409 # v1.5.15
       - name: Compile with coverage and Ycheck
         run: |
           ./project/scripts/sbt '
@@ -104,7 +104,7 @@ jobs:
           check-latest: true
           java-version: 17
           cache: 'sbt'
-      - uses: sbt/setup-sbt@67d461eba2c4753196c230e02da850757ba4775e # v1.5.14
+      - uses: sbt/setup-sbt@7e114eae4f32ec3f93c851c2793376a77f384409 # v1.5.15
       - name: Compile with coverage and Ycheck
         run: |
           ./project/scripts/sbt '
@@ -127,7 +127,7 @@ jobs:
           check-latest: true
           java-version: 17
           cache: 'sbt'
-      - uses: sbt/setup-sbt@67d461eba2c4753196c230e02da850757ba4775e # v1.5.14
+      - uses: sbt/setup-sbt@7e114eae4f32ec3f93c851c2793376a77f384409 # v1.5.15
       - name: Compile with coverage and Ycheck
         run: |
           ./project/scripts/sbt '
@@ -150,7 +150,7 @@ jobs:
           check-latest: true
           java-version: 17
           cache: 'sbt'
-      - uses: sbt/setup-sbt@67d461eba2c4753196c230e02da850757ba4775e # v1.5.14
+      - uses: sbt/setup-sbt@7e114eae4f32ec3f93c851c2793376a77f384409 # v1.5.15
       - name: Compile with coverage and Ycheck
         run: |
           ./project/scripts/sbt '
@@ -173,7 +173,7 @@ jobs:
           check-latest: true
           java-version: 17
           cache: 'sbt'
-      - uses: sbt/setup-sbt@67d461eba2c4753196c230e02da850757ba4775e # v1.5.14
+      - uses: sbt/setup-sbt@7e114eae4f32ec3f93c851c2793376a77f384409 # v1.5.15
       - name: Compile with coverage and Ycheck
         run: |
           ./project/scripts/sbt '
@@ -197,7 +197,7 @@ jobs:
           check-latest: true
           java-version: 17
           cache: 'sbt'
-      - uses: sbt/setup-sbt@67d461eba2c4753196c230e02da850757ba4775e # v1.5.14
+      - uses: sbt/setup-sbt@7e114eae4f32ec3f93c851c2793376a77f384409 # v1.5.15
       # sbt first builds the compiler from this checkout without coverage, then uses it here.
       - name: Compile with coverage
         run: |
@@ -221,7 +221,7 @@ jobs:
           check-latest: true
           java-version: 17
           cache: 'sbt'
-      - uses: sbt/setup-sbt@67d461eba2c4753196c230e02da850757ba4775e # v1.5.14
+      - uses: sbt/setup-sbt@7e114eae4f32ec3f93c851c2793376a77f384409 # v1.5.15
       - name: Compile with coverage
         run: |
           ./project/scripts/sbt '
@@ -244,6 +244,6 @@ jobs:
           check-latest: true
           java-version: 17
           cache: 'sbt'
-      - uses: sbt/setup-sbt@67d461eba2c4753196c230e02da850757ba4775e # v1.5.14
+      - uses: sbt/setup-sbt@7e114eae4f32ec3f93c851c2793376a77f384409 # v1.5.15
       - name: Run coverage compilation tests
         run: ./project/scripts/sbt 'scala3-bootstrapped/testCompilation --enable-coverage-phase'
